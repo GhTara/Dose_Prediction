@@ -12,9 +12,9 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import MLFlowLogger
 # from ray_lightning import RayShardedStrategy
 
-from DosePrediction.Train.my_model import *
+from DosePrediction.Train.proposed_dose_model import *
 # from RTDosePrediction.DosePrediction.Train.model import *
-from DosePrediction.DataLoader.couple_dataloader_OpenKBP_C3D_monai import get_dataset
+from DosePrediction.DataLoader.dataloader_OpenKBP_linked_monai import get_dataset
 import DosePrediction.Train.config as dose_config
 from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
@@ -65,7 +65,7 @@ class TestOpenKBPDataModule(pl.LightningDataModule):
                           num_workers=config.NUM_WORKERS, pin_memory=True)
 
 
-class CoupleNet(pl.LightningModule):
+class LinkedNet(pl.LightningModule):
     def __init__(
             self,
             ckpt_file_path_dose,
@@ -190,7 +190,7 @@ class CoupleNet(pl.LightningModule):
 
         torch.cuda.empty_cache()
 
-        ckp_re_dir = 'IMAGES_DIRECTORY'+'/linked'
+        ckp_re_dir = os.path.join('YourSampleImages/DosePrediction', 'linked')
         if batch_idx < 100:
             plot_DVH(prediction, batch_data, path=os.path.join(ckp_re_dir, 'dvh_{}.png'.format(batch_idx)))
             torch.cuda.empty_cache()
@@ -271,7 +271,7 @@ def main(ckpt_file_path_dose, ckpt_file_path_seg, freez=True):
         'delta1': 10,
         'delta2': 1,
     }
-    net = CoupleNet(
+    net = LinkedNet(
         config_param,
         ckpt_file_path_dose,
         ckpt_file_path_seg,
@@ -283,7 +283,7 @@ def main(ckpt_file_path_dose, ckpt_file_path_seg, freez=True):
 
     # set up checkpoints
     checkpoint_callback = ModelCheckpoint(
-        dirpath=config.CHECKPOINT_MODEL_DIR_FINAL_COUPLE,
+        dirpath=config.CHECKPOINT_MODEL_DIR_FINAL_LINKED,
         save_last=True, monitor="mean_dose_score", mode="max",
         every_n_epochs=net.check_val,
         auto_insert_metric_name=True,
@@ -311,14 +311,15 @@ def main(ckpt_file_path_dose, ckpt_file_path_seg, freez=True):
         logger=mlflow_logger,
         # callbacks=RichProgressBar(),
         # callbacks=[bar],
-        default_root_dir=config.CHECKPOINT_MODEL_DIR_FINAL_COUPLE,
+        default_root_dir=config.CHECKPOINT_MODEL_DIR_FINAL_LINKED,
         # enable_progress_bar=True,
         # log_every_n_steps=net.check_val,
     )
 
     # train
-    # trainer.fit(net, datamodule=openkbp, ckpt_path='SAVED_MODELS'+'/last.ckpt')
-    # trainer.fit(net, datamodule=openkbp, ckpt_path='SAVED_MODELS'+'/last.ckpt')
+    # trainer.fit(net,
+    # datamodule=openkbp,
+    # ckpt_path=os.path.join(config.CHECKPOINT_MODEL_DIR_FINAL_LINKED, 'last.ckpt'))
     trainer.fit(net, datamodule=openkbp)
 
     return net

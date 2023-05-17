@@ -8,7 +8,7 @@ from monai.networks.nets.vit import ViT
 from monai.utils import ensure_tuple_rep
 
 from OARSegmentation.models.nets.base_blocks import ModifiedUnetrUpBlock, ModifiedUnetOutBlock
-import OARSegmentation.config
+import OARSegmentation.config as config
 
 
 class ModifiedUNETR(nn.Module):

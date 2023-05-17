@@ -15,8 +15,8 @@ from torch.nn import init
 
 import bitsandbytes as bnb
 
-from DosePrediction.Train.my_model import *
-from DosePrediction.DataLoader.dataloader_OpenKBP_C3D_monai import get_dataset
+from DosePrediction.Train.proposed_dose_model import *
+from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
 import DosePrediction.Train.config as config
 from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
@@ -335,8 +335,9 @@ def main():
     )
 
     # train
-    # trainer.fit(net, datamodule=openkbp, ckpt_path='SAVED_MODELS'+'/last.ckpt')
-    # trainer.fit(net, datamodule=openkbp, ckpt_path='SAVED_MODELS'+'/last.ckpt')
+    # trainer.fit(net,
+    # datamodule=openkbp,
+    # ckpt_path=os.path.join(config.CHECKPOINT_MODEL_DIR_DOSE_GAN, 'last.ckpt'))
     trainer.fit(net, datamodule=openkbp)
 
     return net

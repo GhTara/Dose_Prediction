@@ -9,31 +9,32 @@ import matplotlib.colors as mcolors
 from monai.metrics import DiceMetric
 
 """
-These codes are modified from https://github.com/ababier/open-kbp
+These codes are modified from https://github.com/ababier/open-kbp and https://github.com/LSL000UD/RTDosePrediction 
 """
+
 
 # define the IVS function
 def IVS(pred, gt, isodose_level, possible_dose_mask=None):
     dice_metric = DiceMetric(
-            include_background=False, reduction="mean", get_not_nans=False
-        )
+        include_background=False, reduction="mean", get_not_nans=False
+    )
     if possible_dose_mask is not None:
         pred = pred[possible_dose_mask > 0]
         gt = gt[possible_dose_mask > 0]
-        
+
     # # calculate the volumes of the predicted and ground truth isodose regions
     # pred_iso_vol = np.sum(pred >= isodose_level)
     # gt_iso_vol = np.sum(gt >= isodose_level)
 
     # # calculate the IVS score
     # ivs = 2 * (pred_iso_vol * gt_iso_vol) / ((pred_iso_vol + gt_iso_vol) ** 2)
-    
+
     # calculate the volumes of the predicted and ground truth isodose regions
     pred_iso_vol = pred >= isodose_level
     gt_iso_vol = gt >= isodose_level
-    
+
     # calculate the IVS score
-    ivs = 2*np.sum(pred_iso_vol*gt_iso_vol)/(np.sum(pred_iso_vol)+np.sum(gt_iso_vol))
+    ivs = 2 * np.sum(pred_iso_vol * gt_iso_vol) / (np.sum(pred_iso_vol) + np.sum(gt_iso_vol))
 
     return ivs
 
@@ -81,13 +82,12 @@ def get_DVH_metrics(_dose, _mask, mode, spacing=None):
 
 
 def get_Dose_score_and_DVH_score(prediction_dir, gt_dir):
-
     list_dose_dif = []
     list_DVH_dif = []
     gt_list_DVH = {}
     pred_list_DVH = {}
     metric_dif = {}
-    
+
     list_patient_ids = tqdm(os.listdir(prediction_dir))
     for patient_id in list_patient_ids:
         pred_nii = sitk.ReadImage(prediction_dir + '/' + patient_id + '/dose.nii.gz')
@@ -100,7 +100,7 @@ def get_Dose_score_and_DVH_score(prediction_dir, gt_dir):
         possible_dose_mask_nii = sitk.ReadImage(gt_dir + '/' + patient_id + '/possible_dose_mask.nii.gz')
         possible_dose_mask = sitk.GetArrayFromImage(possible_dose_mask_nii)
         list_dose_dif.append(get_3D_Dose_dif(pred, gt, possible_dose_mask))
-        
+
         # DVH dif
         for structure_name in ['Brainstem',
                                'SpinalCord',
@@ -137,17 +137,16 @@ def get_Dose_score_and_DVH_score(prediction_dir, gt_dir):
                     metric_dif[metric].append(abs((gt_DVH[metric] - pred_DVH[metric])))
                     gt_list_DVH[metric].append(gt_DVH[metric])
                     pred_list_DVH[metric].append(pred_DVH[metric])
-                    
+
     for key in gt_list_DVH.keys():
         gt_list_DVH[key] = np.mean(gt_list_DVH[key])
         pred_list_DVH[key] = np.mean(pred_list_DVH[key])
         metric_dif[key] = np.mean(metric_dif[key])
-            
+
     return np.mean(list_dose_dif), np.mean(list_DVH_dif), gt_list_DVH, pred_list_DVH, metric_dif
 
 
-def get_Dose_score_and_DVH_score_batch(prediction, batch_data, list_DVH_dif, dict_DVH_dif={}, ivs_values = []):
-    
+def get_Dose_score_and_DVH_score_batch(prediction, batch_data, list_DVH_dif, dict_DVH_dif={}, ivs_values=[]):
     list_DVH_dif = []
 
     # pred = np.array(prediction[0, 0, :, :, :])
@@ -157,7 +156,7 @@ def get_Dose_score_and_DVH_score_batch(prediction, batch_data, list_DVH_dif, dic
     # Dose dif
     possible_dose_mask = np.array(batch_data['dose_mask'][0, 0, :, :, :].cpu())
     dose_dif = get_3D_Dose_dif(pred, gt, possible_dose_mask)
-    
+
     # IVS
     # define the isodose levels to calculate IVS at
     # if True:
@@ -167,8 +166,7 @@ def get_Dose_score_and_DVH_score_batch(prediction, batch_data, list_DVH_dif, dic
         for isoLevel in isodose_levels:
             ivs = IVS(pred, gt, isoLevel, possible_dose_mask=None)
             ivs_values[-1].append(ivs)
-    
-    
+
     structure_file = batch_data['file_path'][0]
     patient_id = structure_file.split('/')[-2]
     dict_DVH_dif[patient_id] = {}
@@ -186,13 +184,13 @@ def get_Dose_score_and_DVH_score_batch(prediction, batch_data, list_DVH_dif, dic
                            'PTV70',
                            'PTV63',
                            'PTV56']:
-                               
+
         if not (structure_name in keys):
             break
-        
+
         # if not (structure_name in dict_DVH_dif.keys()):
         #     dict_DVH_dif[patient_id] = {}
-        
+
         structure = np.array(batch_data[structure_name][0, 0, :, :, :].cpu())
         # If the structure has been delineated
         if np.any(structure):
@@ -208,19 +206,18 @@ def get_Dose_score_and_DVH_score_batch(prediction, batch_data, list_DVH_dif, dic
 
             for metric in gt_DVH.keys():
                 list_DVH_dif.append(abs(gt_DVH[metric] - pred_DVH[metric]))
-                
+
                 # if not (metric in dict_DVH_dif[structure_name].keys()):
                 #     dict_DVH_dif[structure_name][metric] = []
-                col_name = 'pre' + structure_name + '_' + metric  
+                col_name = 'pre' + structure_name + '_' + metric
                 # dict_DVH_dif[patient_id][col_name] = abs(gt_DVH[metric] - pred_DVH[metric])
                 dict_DVH_dif[patient_id][col_name] = pred_DVH[metric]
-                
-                col_name = 'gt_' + structure_name + '_' + metric  
+
+                col_name = 'gt_' + structure_name + '_' + metric
                 dict_DVH_dif[patient_id][col_name] = gt_DVH[metric]
-                
-            
+
     dict_DVH_dif[patient_id]['_dose_dif'] = dose_dif
-    dict_DVH_dif[patient_id]['_DVH_dif'] = np.mean(list_DVH_dif)  
+    dict_DVH_dif[patient_id]['_DVH_dif'] = np.mean(list_DVH_dif)
 
     return dose_dif, np.mean(list_DVH_dif), dict_DVH_dif, ivs_values
 
@@ -246,16 +243,16 @@ def plot_DVH(prediction, batch_data, path):
     DVH_all_pred = defaultdict()
     colors = mcolors.TABLEAU_COLORS
     colors_labels = {'Brainstem': colors[list(colors.keys())[0]],
-                           'SpinalCord': colors[list(colors.keys())[1]],
-                           'RightParotid': colors[list(colors.keys())[2]],
-                           'LeftParotid': colors[list(colors.keys())[3]],
-                           'Esophagus': colors[list(colors.keys())[4]],
-                           'Larynx': colors[list(colors.keys())[5]],
-                           'Mandible': colors[list(colors.keys())[6]],
+                     'SpinalCord': colors[list(colors.keys())[1]],
+                     'RightParotid': colors[list(colors.keys())[2]],
+                     'LeftParotid': colors[list(colors.keys())[3]],
+                     'Esophagus': colors[list(colors.keys())[4]],
+                     'Larynx': colors[list(colors.keys())[5]],
+                     'Mandible': colors[list(colors.keys())[6]],
 
-                           'PTV70': colors[list(colors.keys())[7]],
-                           'PTV63': colors[list(colors.keys())[8]],
-                           'PTV56': colors[list(colors.keys())[9]]}
+                     'PTV70': colors[list(colors.keys())[7]],
+                     'PTV63': colors[list(colors.keys())[8]],
+                     'PTV56': colors[list(colors.keys())[9]]}
     for structure_name in ['Brainstem',
                            'SpinalCord',
                            'RightParotid',
@@ -306,7 +303,8 @@ def plot_DVH(prediction, batch_data, path):
         g = random.uniform(0, 1);
         b = random.uniform(0, 1)
         line, = plt.plot(dose_bin_plot, DVH_all_ref[roi] * 100, color=colors_labels[roi], linewidth=2, label=roi)
-        plt.plot(dose_bin_plot, DVH_all_pred[roi] * 100, color=colors_labels[roi], linewidth=2, linestyle='dashed', label=roi)
+        plt.plot(dose_bin_plot, DVH_all_pred[roi] * 100, color=colors_labels[roi], linewidth=2, linestyle='dashed',
+                 label=roi)
         roi_legend.append(line)
 
     plt.ylabel('volume %')

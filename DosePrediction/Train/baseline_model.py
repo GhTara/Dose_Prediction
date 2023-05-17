@@ -9,6 +9,7 @@ Used for training the baseline according to its repository:
 https://github.com/LSL000UD/RTDosePrediction 
 '''
 
+
 class SingleConv(nn.Module):
     def __init__(self, in_ch, out_ch, kernel_size, stride, padding):
         super(SingleConv, self).__init__()
@@ -169,6 +170,7 @@ class Model(nn.Module):
         output_B = self.conv_out_B(out_net_B)
         return [output_A, output_B]
 
+
 def create_pretrained_unet(
         ckpt_file,
         in_ch,
@@ -197,7 +199,8 @@ def create_pretrained_unet(
     # assert len(inside) > len(missing)
     # assert len(inside) > len(unused)
 
-    pretrain['network_state_dict'] = {k: v for k, v in pretrain['network_state_dict'].items() if (k in net_dict.keys()) and ('net_A' in k) or ('conv_out_A' in k)}
+    pretrain['network_state_dict'] = {k: v for k, v in pretrain['network_state_dict'].items() if
+                                      (k in net_dict.keys()) and ('net_A' in k) or ('conv_out_A' in k)}
     print(f"loaded weights: {len(tuple(pretrain['network_state_dict']))}")
     net.load_state_dict(pretrain['network_state_dict'], strict=False)
     return net, inside

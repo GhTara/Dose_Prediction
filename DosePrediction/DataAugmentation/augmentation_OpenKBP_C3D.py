@@ -1,4 +1,8 @@
 # -*- encoding: utf-8 -*-
+"""
+Used for training the baseline according to its repository:
+https://github.com/LSL000UD/RTDosePrediction
+"""
 import numpy as np
 import random
 import cv2

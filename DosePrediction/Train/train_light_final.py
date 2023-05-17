@@ -12,9 +12,9 @@ from pytorch_lightning.loggers import MLFlowLogger
 
 import bitsandbytes as bnb
 
-from DosePrediction.Train.my_model import *
+from DosePrediction.Train.proposed_dose_model import *
 # from RTDosePrediction.DosePrediction.Train.model import *
-from DosePrediction.DataLoader.dataloader_OpenKBP_C3D_monai import get_dataset
+from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
 import DosePrediction.Train.config as config
 from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
@@ -250,7 +250,7 @@ class CascadeUNet(pl.LightningModule):
 
         torch.cuda.empty_cache()
         # if False:
-        ckp_re_dir = 'IMAGES_DIRECTORY' + '/ours_model'
+        ckp_re_dir = os.path.join('YourSampleImages/DosePrediction' + 'ours_model')
         if batch_idx < 100:
             plot_DVH(prediction, batch_data, path=os.path.join(ckp_re_dir, 'dvh_{}.png'.format(batch_idx)))
             torch.cuda.empty_cache()
@@ -392,9 +392,11 @@ def main(freez=True, delta1=10, delta2=8, run_id=None, run_name=None, ckpt_path=
     )
 
     # train
-    # trainer.fit(net, datamodule=openkbp, ckpt_path='SAVED_MODELS'+'/last.ckpt')
+    # trainer.fit(net, datamodule=openkbp, ckpt_path=os.path.join(ckpt_path, 'last.ckpt'))
     if run_name is None:
-        trainer.fit(net, datamodule=openkbp, ckpt_path=os.path.join(ckpt_path, 'last.ckpt'))
+        trainer.fit(net,
+                    datamodule=openkbp,
+                    ckpt_path=os.path.join(ckpt_path, 'last.ckpt'))
     else:
         trainer.fit(net, datamodule=openkbp)
 

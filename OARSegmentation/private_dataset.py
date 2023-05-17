@@ -62,13 +62,9 @@ def read_data(dataset_path):
         patient = {}
 
         patient['filename'] = file
-        
+
         patient['reverse'] = True
 
-        # if 'AE' in file:
-        #     patient['reverse'] = True
-        # else:
-        #     patient['reverse'] = False
 
         for oar in list_names:
 
@@ -92,11 +88,10 @@ def read_data(dataset_path):
 class PermuteD:
     def __init__(self, keys):
         self.keys = keys
-        
+
     def __call__(self, image_dict):
         if image_dict['reverse']:
             for key in self.keys:
-                # image_dict[key] = torch.tensor(image_dict[key].numpy()[::, ::, ::-1].copy())
                 image_dict[key] = image_dict[key][::, ::, ::-1]
 
         return image_dict
@@ -106,11 +101,6 @@ class Empty2FullOAR:
     def __call__(self, image_dict):
         mask = np.zeros(image_dict["CT"].shape, np.uint8)
         image_dict["OARs"] = mask.copy()
-        # for oar in OAR_NAMES:
-        #     if oar in image_dict.keys():
-        #         None
-        #     else:
-        #         image_dict[oar] = mask.copy()
 
         return image_dict
 
@@ -122,13 +112,6 @@ class ORTransform:
         self.oar_names = OAR_NAMES_DIC
 
     def __call__(self, image_dict):
-        # for oar in self.oar_names:
-        #     if oar in image_dict.keys():
-        #         mask = np.int8(np.logical_or(image_dict[oar], mask))
-        #
-        # image_dict["OARs"] = mask
-
-        # image_dict["OARs"] = np.concatenate([image_dict[OAR] for OAR in self.oar_names], axis=0)
 
         for i, oar_name in enumerate(OAR_NAMES_DIC.keys()):
             oar = image_dict[oar_name]
@@ -168,9 +151,9 @@ def prepare_data(files, state, a_min, a_max, cache_num, cache):
             ORTransform(),
 
             # EnsureChannelFirstd(keys=final_keys, allow_missing_keys=True),  # for version upper than 0.7.0 monai
-            AddChanneld(keys=final_keys, allow_missing_keys=True), # for version = 0.7.0 monai
-            
-            Resized(keys=final_keys, spatial_size=(128,128,-1), mode=['area', 'nearest']),
+            AddChanneld(keys=final_keys, allow_missing_keys=True),  # for version = 0.7.0 monai
+
+            Resized(keys=final_keys, spatial_size=(128, 128, -1), mode=['area', 'nearest']),
 
             MyIntensityNormalTransform(a_min=a_min, a_max=a_max),
             # # CropForegroundd(keys=final_keys, source_key="CT"),
@@ -241,42 +224,32 @@ def prepare_data(files, state, a_min, a_max, cache_num, cache):
 
 def get_dataset(path, a_min=-2048, a_max=2500, cache_num=24, cache=False):
     # read files to make dictionary
-    random_test = [44,23,6,16, 43,42,90,21,54,46,39,75,62,84,65,30] # 16 val-set
+    random_test = [44, 23, 6, 16, 43, 42, 90, 21, 54, 46, 39, 75, 62, 84, 65, 30]  # 16 val-set
     files = read_data(path)
 
     if len(files) == 0:
         raise Exception("number of files are zero!")
-        
+
     test_files = [files[i] for i in range(len(files)) if (i in random_test)]
     train_files = [files[i] for i in range(len(files)) if not (i in random_test)]
 
     test_data = prepare_data(files=test_files, state="val",
-                        a_min=a_min, a_max=a_max, cache_num=cache_num, cache=cache)
-                        
+                             a_min=a_min, a_max=a_max, cache_num=cache_num, cache=cache)
+
     train_data = prepare_data(files=train_files, state="train",
-                        a_min=a_min, a_max=a_max, cache_num=cache_num, cache=cache)
+                              a_min=a_min, a_max=a_max, cache_num=cache_num, cache=cache)
 
     return test_data, train_data
 
 
 def test():
-
     data = get_dataset(path=config.TRAIN_DIR_PRIVATE, state='train', size=1)
 
     loader = DataLoader(data, batch_size=config.BATCH_SIZE)
 
-    # sample = next(iter(loader))
-    # volume = sample['CT']
-    # label = sample['OARs']
-    # print(volume.shape)
-    # print(label.shape)
-
     for batch_idx, batch_data in enumerate(loader):
         volume = batch_data['CT']
         # label = batch_data['OARs']
-        print(volume.shape)
-        # print(label.shape)
-        print()
 
 
 if __name__ == '__main__':

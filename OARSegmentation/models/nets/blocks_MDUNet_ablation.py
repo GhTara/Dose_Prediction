@@ -118,9 +118,9 @@ class DualDilatedBlock(nn.Module):
     def __init__(self, ch_in, ch_out):
         super(DualDilatedBlock, self).__init__()
 
-        self.conv_3 = conv_block_3(ch_in, ch_out, act)
-        self.conv_5 = dilated_conv_block_5(ch_in, ch_out, act)
-        self.conv_7 = dilated_conv_block_7(ch_in, ch_out, act)
+        self.conv_3 = conv_block_3(ch_in, ch_out)
+        self.conv_5 = dilated_conv_block_5(ch_in, ch_out)
+        self.conv_7 = dilated_conv_block_7(ch_in, ch_out)
 
         self.conv = nn.Sequential(
             nn.Conv3d(ch_out * 3, ch_out, kernel_size=1, stride=1, padding=0, bias=True),

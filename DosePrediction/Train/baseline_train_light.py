@@ -11,11 +11,11 @@ from pytorch_lightning.loggers import MLFlowLogger
 
 from typing import Optional
 
-from RTDosePrediction.Src.Train.baseline_model import *
-from RTDosePrediction.Src.DataLoader.dataloader_OpenKBP_C3D_monai import get_dataset
-import RTDosePrediction.Src.Train.config as config
-from RTDosePrediction.Src.Evaluate.evaluate_openKBP import *
-from RTDosePrediction.Src.Train.loss import Loss
+from DosePrediction.Train.baseline_model import *
+from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
+import DosePrediction.Train.config as config
+from DosePrediction.Evaluate.evaluate_openKBP import *
+from DosePrediction.Train.loss import Loss
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 torch.backends.cudnn.benchmark = True
@@ -86,11 +86,6 @@ class CascadeUNet(pl.LightningModule):
         self.save_hyperparameters()
 
         # OAR + PTV + CT => dose
-
-        # self.model_ = Model(in_ch=9, out_ch=1,
-        #               list_ch_A=[-1, 16, 32, 64, 128, 256],
-        #               list_ch_B=[-1, 32, 64, 128, 256, 512],)
-
         self.model_, inside = create_pretrained_unet(
             in_ch=9, out_ch=1,
             list_ch_A=[-1, 16, 32, 64, 128, 256],
@@ -118,7 +113,6 @@ class CascadeUNet(pl.LightningModule):
         self.train_epoch_loss = []
 
         self.max_epochs = 1300
-        # self.max_epochs = 150
         # 10
         self.check_val = 10
         # 5
@@ -151,8 +145,6 @@ class CascadeUNet(pl.LightningModule):
             self.moving_train_loss = \
                 (1 - self.eps_train_loss) * self.moving_train_loss \
                 + self.eps_train_loss * loss.item()
-
-        # self.log("moving_train_loss", self.moving_train_loss, logger=False)
 
         tensorboard_logs = {"train_loss": loss.item()}
 
@@ -292,7 +284,7 @@ class CascadeUNet(pl.LightningModule):
         print(len(self.list_DVH_dif))
         torch.cuda.empty_cache()
         # if False:
-        ckp_re_dir = 'IMAGES_DIRECTORY' + '/baseline'
+        ckp_re_dir = os.path.join('YourSampleImages/DosePrediction', 'baseline')
         if batch_idx < 100:
             plot_DVH(prediction, batch_data, path=os.path.join(ckp_re_dir, 'dvh_{}.png'.format(batch_idx)))
             torch.cuda.empty_cache()
@@ -398,7 +390,7 @@ def main(freez=True):
         experiment_name='EXPERIMENT_NAME',
         tracking_uri="databricks",
         # run_name = 'RUN_NAME'
-        run_id = 'RUN_ID'
+        run_id='RUN_ID'
     )
 
     # initialise Lightning's trainer.
@@ -418,9 +410,9 @@ def main(freez=True):
     )
 
     # train
-    trainer.fit(net, datamodule=openkbp,
-                ckpt_path='SAVED_MODELS'+'/last.ckpt')
-    # trainer.fit(net, datamodule=openkbp, ckpt_path='SAVED_MODELS'+'/last.ckpt')
+    trainer.fit(net,
+                datamodule=openkbp,
+                ckpt_path=os.path.join(config.CHECKPOINT_MODEL_DIR_BASE_FINAL_FREEZ, 'last.ckpt'))
     # trainer.fit(net, datamodule=openkbp)
 
     return net

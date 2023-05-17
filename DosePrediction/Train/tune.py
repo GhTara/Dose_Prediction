@@ -123,7 +123,6 @@ def main(num_samples=10,
         reduction_factor=reduction_factor,
         brackets=brackets)
 
-    # Make sure to pass in ``resources_per_trial`` using the ``get_tune_resources`` utility.
     # resources_per_trial = {"cpu": 2, "gpu": 1}
     resources_per_trial = get_tune_resources(
         num_workers=num_workers, use_gpu=use_gpu)
