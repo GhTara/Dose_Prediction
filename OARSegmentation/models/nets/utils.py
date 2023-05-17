@@ -7,7 +7,7 @@ from monai.networks.layers.convutils import same_padding
 from monai.networks.layers.factories import Act, Norm
 from monai.networks.blocks.dynunet_block import get_padding, get_output_padding
 
-from UNet.models.nets.convs import MultiScaleConv
+from OARSegmentation.models.nets.convs import MultiScaleConv
 
 
 class MultiScaleConvolution(nn.Sequential):

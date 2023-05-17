@@ -24,7 +24,7 @@ from monai.transforms import (
     RandRotate90d
 
 )
-import UNet.config as config
+import OARSegmentation.config as config
 
 OAR_NAMES = config.OAR_NAMES
 

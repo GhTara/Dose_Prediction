@@ -17,8 +17,8 @@ from monai.metrics import DiceMetric, HausdorffDistanceMetric, get_confusion_mat
 from monai.networks.nets import UNet, UNETR
 from monai.config import print_config
 
-import UNet.config as config
-from UNet.dataset import get_dataset
+import OARSegmentation.config as config
+from OARSegmentation.dataset import get_dataset
 # from private_dataset import get_dataset
 
 import pytorch_lightning as pl
@@ -31,8 +31,8 @@ import json
 from typing import Optional
 import matplotlib.pyplot as plt
 
-# from UNet.models.networks.modified_unetr import ModifiedUNETR
-from UNet.old_models.networks.modified_unetr import ModifiedUNETR
+# from OARSegmentation.models.networks.modified_unetr import ModifiedUNETR
+from OARSegmentation.old_models.networks.modified_unetr import ModifiedUNETR
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 torch.backends.cudnn.benchmark = True

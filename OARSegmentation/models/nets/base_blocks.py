@@ -6,8 +6,8 @@ from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetResBlock
 # from monai.networks.layers.factories import Act, Norm
 from monai.networks.blocks.dynunet_block import get_conv_layer
 
-from UNet.models.nets.utils import get_multi_conv_layer
-from UNet.models.nets.blocks_MDUNet import conv_3_1, DualDilatedBlock
+from OARSegmentation.models.nets.utils import get_multi_conv_layer
+from OARSegmentation.models.nets.blocks_MDUNet import conv_3_1, DualDilatedBlock
 
 
 class MultiUnetBasicBlock(nn.Module):

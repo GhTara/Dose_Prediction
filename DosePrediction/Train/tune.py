@@ -1,45 +1,34 @@
-import os
-import math
-from functools import partial
-import argparse
-import torch
-import mlflow
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 # from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.loggers import MLFlowLogger
 # from ray import tune, air
 # from ray.air import session
 # from ray.tune import CLIReporter
 # from ray.tune.integration.mlflow import mlflow_mixin
 # from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback
-from ray.tune.schedulers import AsyncHyperBandScheduler, PopulationBasedTraining
-from ray.tune.search.bayesopt import BayesOptSearch
-from ray.tune.search import ConcurrencyLimiter
+from ray.tune.schedulers import AsyncHyperBandScheduler
 from ray.tune.search.hyperopt import HyperOptSearch
 # from ray.tune.suggest.ax import AxSearch
-import ray
 from ray_lightning.tune import TuneReportCallback, get_tune_resources
 from ray_lightning import RayStrategy
 from ray import tune
 
-
-from RTDosePrediction.Src.C3D.train_light_final import *
-import RTDosePrediction.Src.DataLoader.config as config
+from DosePrediction.Train.train_light_final import *
+import DosePrediction.Train.config as config
 
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.utilities import rank_zero_only
 
+
 class MyModelCheckpoint(ModelCheckpoint):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-    
+
     @rank_zero_only
     def _del_model(self, *_):
         pass
-    
+
     def _save_model(self, *_):
         pass
+
 
 def train_model(config_hparam,
                 num_epochs=10,
@@ -58,7 +47,7 @@ def train_model(config_hparam,
 
     # set up logger
     mlflow_logger = MLFlowLogger(
-        experiment_name='/Users/gheshlaghitara@gmail.com/dose-prediction-tune-hp_ex2',
+        experiment_name='EXPERIMENT_NAME',
         tracking_uri="databricks",
         # run_id = ''
     )
@@ -94,18 +83,17 @@ def main(num_samples=10,
         # 'weight_decay': 0.00021139244378558662,
         'delta1': 10,
         'delta2': 8,
-        
+
         # "act": tune.choice(['mish', 'relu']),
         # "multiS_conv": tune.choice([True, False]),
         "lr": tune.loguniform(1e-4, 1e-1),
         "weight_decay": tune.loguniform(1e-4, 1e-3),
         # 'delta2': tune.randint(lower=0, upper=10),
-        
+
         "num_epochs": num_epochs,
         "num_workers": num_workers,
         "use_gpu": use_gpu,
     }
-
 
     metrics = {"loss": "val_loss"}
     callbacks = [TuneReportCallback(metrics, on="validation_end"),
@@ -138,7 +126,7 @@ def main(num_samples=10,
     # Make sure to pass in ``resources_per_trial`` using the ``get_tune_resources`` utility.
     # resources_per_trial = {"cpu": 2, "gpu": 1}
     resources_per_trial = get_tune_resources(
-            num_workers=num_workers, use_gpu=use_gpu)
+        num_workers=num_workers, use_gpu=use_gpu)
     analysis = tune.run(
         trainable,
         metric="loss",

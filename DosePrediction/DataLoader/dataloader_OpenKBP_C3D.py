@@ -5,9 +5,9 @@ import SimpleITK as sitk
 import numpy as np
 import random
 import cv2
-import RTDosePrediction.Src.DataLoader.config as config
+import DosePrediction.Train.config as config
 
-from RTDosePrediction.Src.DataAugmentation.augmentation_OpenKBP_C3D import \
+from DosePrediction.DataAugmentation.augmentation_OpenKBP_C3D import \
     random_flip_3d, random_rotate_around_z_axis, random_translate, to_tensor
 
 """

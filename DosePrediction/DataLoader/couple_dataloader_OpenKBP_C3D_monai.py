@@ -1,35 +1,24 @@
 from glob import glob
-import numpy as np
-import torch
 
 import os
 
 import numpy as np
 import torch
-import torchvision.transforms as transforms
-from pytorch_lightning import LightningDataModule, LightningModule, Trainer
-from torch.utils.data import DataLoader, random_split
-from torchvision.datasets import MNIST
+from torch.utils.data import DataLoader
 
-PATH_DATASETS = os.environ.get("PATH_DATASETS", ".")
+PATH_DATASETS = os.environ.get("PATH_DATASETS", "")
 BATCH_SIZE = 256 if torch.cuda.is_available() else 64
 NUM_WORKERS = int(os.cpu_count() / 2)
 
-from monai.data import Dataset, DataLoader, CacheDataset, list_data_collate, pad_list_data_collate
+from monai.data import Dataset, DataLoader, CacheDataset, list_data_collate
 from monai.transforms import (
     Compose,
     LoadImaged,
     ToTensord,
     AddChanneld,
-    EnsureChannelFirstd,
-    Spacingd,
     Orientationd,
-    ScaleIntensityRanged,
-    CropForegroundd,
-    Resized,
     ConcatItemsd,
     DeleteItemsd,
-    Activations,
     # ToMetaTensord,
     RandCropByPosNegLabeld,
     RandFlipd,
@@ -38,8 +27,7 @@ from monai.transforms import (
     Transposed,
 
 )
-import random
-import RTDosePrediction.Src.DataLoader.config as config
+import DosePrediction.Train.config as config
 
 OAR_NAMES = config.OAR_NAMES
 PTV_NAMES = config.PTV_NAMES

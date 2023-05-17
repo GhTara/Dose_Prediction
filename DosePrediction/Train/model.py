@@ -5,8 +5,8 @@ import torch.nn.functional as F
 from monai.networks.nets.vit import ViT
 from monai.utils import ensure_tuple_rep
 
-from RTDosePrediction.Src.C3D.blocks_MDUNet import conv_3_1, DualDilatedBlock
-# from RTDosePrediction.Src.C3D.model_monai import *
+from DosePrediction.Train.blocks_MDUNet import conv_3_1, DualDilatedBlock
+# from DosePrediction.Train.model_monai import *
 
 
 class MultiAttGate(nn.Module):

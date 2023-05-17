@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch import optim
 '''
-Used for training the baseline according its repository: 
+Used for training the baseline according to its repository: 
 https://github.com/LSL000UD/RTDosePrediction 
 '''
 class TrainerSetting:

@@ -1,4 +1,3 @@
-import os
 import sys
 import gc
 
@@ -6,37 +5,25 @@ sys.path.insert(0, 'HOME_DIRECTORY')
 
 from monai.inferers import sliding_window_inference
 from monai.data import DataLoader, list_data_collate, decollate_batch
-from monai.metrics import DiceMetric, HausdorffDistanceMetric
+from monai.metrics import HausdorffDistanceMetric
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.callbacks import TQDMProgressBar, ProgressBarBase
-from pytorch_lightning.callbacks.progress import RichProgressBar
 from pytorch_lightning.loggers import MLFlowLogger
 # from ray_lightning import RayShardedStrategy
 
-from torchvision.utils import make_grid
-from torchvision.utils import save_image
-import torchvision.transforms.functional as TF
+from DosePrediction.Train.my_model import *
+# from RTDosePrediction.DosePrediction.Train.model import *
+from DosePrediction.DataLoader.couple_dataloader_OpenKBP_C3D_monai import get_dataset
+import DosePrediction.Train.config as dose_config
+from DosePrediction.Evaluate.evaluate_openKBP import *
+from DosePrediction.Train.loss import GenLoss
 
-import bitsandbytes as bnb
+from DosePrediction.Train.train_light_final import CascadeUNet
+from OARSegmentation.train import litAutoSeg
 
-from typing import Optional
-
-import matplotlib.pyplot as plt
-
-from RTDosePrediction.Src.C3D.my_model import *
-# from RTDosePrediction.Src.C3D.model import *
-from RTDosePrediction.Src.DataLoader.couple_dataloader_OpenKBP_C3D_monai import get_dataset
-import RTDosePrediction.Src.DataLoader.config as dose_config
-from RTDosePrediction.Src.Evaluate.evaluate_openKBP import *
-from RTDosePrediction.Src.C3D.loss import Loss, GenLoss
-
-from RTDosePrediction.Src.C3D.train_light_final import CascadeUNet
-from UNet.train import litAutoSeg
-
-import RTDosePrediction.Src.DataLoader.config as config
-import UNet.config as config_seg
+import DosePrediction.Train.config as config
+import OARSegmentation.config as config_seg
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 torch.backends.cudnn.benchmark = True

@@ -1,34 +1,23 @@
-import os
 import sys
 import gc
-sys.path.insert(0, '/content/drive/.shortcut-targets-by-id/1G1XahkS3Mp6ChD2Q5kBTmR9Cb6B7JUPy/thesis/')
 
-from monai.inferers import sliding_window_inference
-from monai.data import DataLoader, list_data_collate, decollate_batch
+sys.path.insert(0, 'HOME_DIRECTORY')
+
+from monai.data import DataLoader, list_data_collate
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.callbacks import TQDMProgressBar, ProgressBarBase
-from pytorch_lightning.callbacks.progress import RichProgressBar
 from pytorch_lightning.loggers import MLFlowLogger
 # from ray_lightning import RayShardedStrategy
 
-from torchvision.utils import make_grid
-from torchvision.utils import save_image
-import torchvision.transforms.functional as TF
-
 import bitsandbytes as bnb
 
-from typing import Optional
-
-import matplotlib.pyplot as plt
-
-from RTDosePrediction.Src.C3D.my_model import *
-# from RTDosePrediction.Src.C3D.model import *
-from RTDosePrediction.Src.DataLoader.dataloader_OpenKBP_C3D_monai import get_dataset
-import RTDosePrediction.Src.DataLoader.config as config
-from RTDosePrediction.Src.Evaluate.evaluate_openKBP import *
-from RTDosePrediction.Src.C3D.loss import Loss, GenLoss
+from DosePrediction.Train.my_model import *
+# from RTDosePrediction.DosePrediction.Train.model import *
+from DosePrediction.DataLoader.dataloader_OpenKBP_C3D_monai import get_dataset
+import DosePrediction.Train.config as config
+from DosePrediction.Evaluate.evaluate_openKBP import *
+from DosePrediction.Train.loss import GenLoss
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 torch.backends.cudnn.benchmark = True
@@ -63,7 +52,8 @@ class TestOpenKBPDataModule(pl.LightningDataModule):
         # Assign val datasets for use in dataloaders
 
         self.test_data = get_dataset(path=config.MAIN_PATH + config.VAL_DIR, state='test',
-                                    size=100, cache=True)
+                                     size=100, cache=True)
+
     def test_dataloader(self):
         return DataLoader(self.test_data, batch_size=1, shuffle=False,
                           num_workers=config.NUM_WORKERS, pin_memory=True)
@@ -99,36 +89,33 @@ class CascadeUNet(pl.LightningModule):
         self.save_hyperparameters()
 
         # OAR + PTV + CT => dose
-        
+
         self.model_, inside = create_pretrained_unet(
-        in_ch=9, out_ch=1,
-        list_ch_A=[-1, 16, 32, 64, 128, 256],
-        list_ch_B=[-1, 32, 64, 128, 256, 512],
-        ckpt_file='/content/drive/MyDrive/thesis/pretrained_models/baseline/C3D_bs4_iter80000.pkl',
-        mode_decoder=1,
-        mode_encoder=1,
-        feature_size=16,
-        img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
-        num_layers=8,  # 4, 8, 12
-        num_heads=6,  # 3, 6, 12
-        # act='mish',
-        act=config_param["act"],
-        mode_multi_dec=True,
-        # multiS_conv=True,
-        multiS_conv=config_param["multiS_conv"],)
-        
+            in_ch=9, out_ch=1,
+            list_ch_A=[-1, 16, 32, 64, 128, 256],
+            list_ch_B=[-1, 32, 64, 128, 256, 512],
+            ckpt_file='HOME_DIRECTORY' + '/pretrained_models/baseline/C3D_bs4_iter80000.pkl',
+            mode_decoder=1,
+            mode_encoder=1,
+            feature_size=16,
+            img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
+            num_layers=8,  # 4, 8, 12
+            num_heads=6,  # 3, 6, 12
+            # act='mish',
+            act=config_param["act"],
+            mode_multi_dec=True,
+            # multiS_conv=True,
+            multiS_conv=config_param["multiS_conv"], )
+
         if freez:
             for n, param in self.model_.named_parameters():
-                if  'net_A' in n or 'conv_out_A' in n:
+                if 'net_A' in n or 'conv_out_A' in n:
                     param.requires_grad = False
-        
 
-        # self.lr_scheduler_type = lr_scheduler_type
         self.lr_scheduler_type = config_param["lr"]
         self.weight_decay = config_param["weight_decay"]
 
         self.loss_function = GenLoss()
-        # Moving average loss, loss is the smaller the better
         self.eps_train_loss = 0.01
 
         self.best_average_val_index = -99999999.
@@ -149,9 +136,9 @@ class CascadeUNet(pl.LightningModule):
         self.img_height = config.IMAGE_SIZE
         self.img_width = config.IMAGE_SIZE
         self.img_depth = config.IMAGE_SIZE
-        
+
         self.sw_batch_size = config.SW_BATCH_SIZE
-        
+
         self.list_DVH_dif = []
         self.list_dose_metric = []
         self.dict_DVH_dif = {}
@@ -170,7 +157,7 @@ class CascadeUNet(pl.LightningModule):
         torch.cuda.empty_cache()
 
         loss = self.loss_function(output, target, casecade=True, freez=self.freez,
-                                    delta1=self.config_param['delta1'], delta2=self.config_param['delta2'])
+                                  delta1=self.config_param['delta1'], delta2=self.config_param['delta2'])
 
         if self.moving_train_loss is None:
             self.moving_train_loss = loss.item()
@@ -178,8 +165,6 @@ class CascadeUNet(pl.LightningModule):
             self.moving_train_loss = \
                 (1 - self.eps_train_loss) * self.moving_train_loss \
                 + self.eps_train_loss * loss.item()
-
-        # self.log("moving_train_loss", self.moving_train_loss, logger=False)
 
         tensorboard_logs = {"train_loss": loss.item()}
 
@@ -191,7 +176,6 @@ class CascadeUNet(pl.LightningModule):
         if train_mean_loss < self.best_average_train_loss:
             self.best_average_train_loss = train_mean_loss
         self.train_epoch_loss.append(train_mean_loss.detach().cpu().numpy())
-        # self.log("best_average_train_loss", self.best_average_train_loss, logger=False)
         self.logger.log_metrics({"train_mean_loss": train_mean_loss}, self.current_epoch + 1)
         torch.cuda.empty_cache()
 
@@ -203,13 +187,9 @@ class CascadeUNet(pl.LightningModule):
         possible_dose_mask = np.array(target[:, 1:, :, :, :].cpu())
 
         roi_size = (config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE)
-    
+
         prediction = self.forward(input_)
-        
-        
-        # prediction = sliding_window_inference(
-        #     input_, roi_size, self.sw_batch_size, lambda x: self.forward(x)[1]
-        # )
+
         torch.cuda.empty_cache()
         loss = self.loss_function(prediction[1][0], target, mode='val', casecade=True, freez=self.freez)
 
@@ -242,18 +222,15 @@ class CascadeUNet(pl.LightningModule):
         return {"log": tensorboard_logs}
 
     def configure_optimizers(self):
-        # optimizer = torch.optim.AdamW(self.model_.parameters(), lr=1e-3, weight_decay=1e-4)
-        # optimizer = bnb.optim.Adam8bit(self.model_.parameters(), lr=1e-3, weight_decay=1e-4) # instead of torch.optim.Adam
-        optimizer = bnb.optim.Adam8bit(self.model_.parameters(), lr=self.lr_scheduler_type, weight_decay=self.weight_decay)
-        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.trainer.max_epochs, 0)
-        # return [optimizer], [scheduler]
+        optimizer = bnb.optim.Adam8bit(self.model_.parameters(), lr=self.lr_scheduler_type,
+                                       weight_decay=self.weight_decay)
         return optimizer
-        
+
     def test_step(self, batch_data, batch_idx):
         torch.cuda.empty_cache()
         input_ = batch_data["Input"].float()
         target = batch_data["GT"]
-        
+
         gt_dose = target[:, :1, :, :, :].cpu()
         possible_dose_mask = target[:, 1:, :, :, :].cpu()
 
@@ -261,22 +238,20 @@ class CascadeUNet(pl.LightningModule):
         # sw_batch_size = 1
         prediction = self.forward(input_)
         prediction = prediction[1][0].cpu()
-    
+
         prediction[np.logical_or(possible_dose_mask < 1, prediction < 0)] = 0
-        
-        # for save image
-        # pred_img = torch.permute(prediction[0].cpu(), (1,0,2,3))
-        
+
         prediction = 70. * prediction
-        
+
         dose_dif, DVH_dif, self.dict_DVH_dif, ivs_values = get_Dose_score_and_DVH_score_batch(
-            prediction, batch_data, list_DVH_dif=self.list_DVH_dif, dict_DVH_dif=self.dict_DVH_dif, ivs_values=self.ivs_values)
+            prediction, batch_data, list_DVH_dif=self.list_DVH_dif, dict_DVH_dif=self.dict_DVH_dif,
+            ivs_values=self.ivs_values)
         self.list_DVH_dif.append(DVH_dif)
-        
+
         torch.cuda.empty_cache()
         # if False:
-        ckp_re_dir = '/content/drive/MyDrive/results_thesis_images/final_2'
-        if batch_idx<100:
+        ckp_re_dir = 'IMAGES_DIRECTORY' + '/ours_model'
+        if batch_idx < 100:
             plot_DVH(prediction, batch_data, path=os.path.join(ckp_re_dir, 'dvh_{}.png'.format(batch_idx)))
             torch.cuda.empty_cache()
             del batch_data
@@ -284,91 +259,69 @@ class CascadeUNet(pl.LightningModule):
             gc.collect()
         if False:
             prediction_b = prediction.cpu()
-            
 
             # Post-processing and evaluation
             # prediction[torch.logical_or(possible_dose_mask < 1, prediction < 0)] = 0
             # for save image
             gt_dose[possible_dose_mask < 1] = 0
-            
-            pred_img = torch.permute(prediction[0].cpu(), (1,0,2,3))
-            gt_img = torch.permute(gt_dose[0], (1,0,2,3))
+
+            pred_img = torch.permute(prediction[0].cpu(), (1, 0, 2, 3))
+            gt_img = torch.permute(gt_dose[0], (1, 0, 2, 3))
             name_p = batch_data['file_path'][0].split("/")[-2]
-            
+
             for i in range(len(pred_img)):
                 pred_i = pred_img[i][0].numpy()
                 gt_i = 70. * gt_img[i][0].numpy()
                 error = np.abs(gt_i - pred_i)
-                
+
                 # plt.figure("check", (12, 6))
                 # Create a figure and axis object using Matplotlib
                 fig, axs = plt.subplots(3, 1, figsize=(4, 10))
                 plt.subplots_adjust(wspace=0, hspace=0)
-            
+
                 # Display the ground truth array
                 axs[0].imshow(gt_i, cmap='jet')
                 # axs[0].set_title('Ground Truth')
                 axs[0].axis('off')
-            
+
                 # Display the prediction array
                 axs[1].imshow(pred_i, cmap='jet')
                 # axs[1].set_title('Prediction')
                 axs[1].axis('off')
-                
+
                 # Display the error map using a heatmap
                 heatmap = axs[2].imshow(error, cmap='jet')
                 # axs[2].set_title('Error Map')
                 axs[2].axis('off')
-            
+
                 save_dir = os.path.join(ckp_re_dir, '{}_{}'.format(name_p, batch_idx))
                 if not os.path.isdir(save_dir):
-                            os.mkdir(save_dir)
-            
+                    os.mkdir(save_dir)
+
                 fig.savefig(os.path.join(save_dir, '{}.jpg'.format(i)), bbox_inches="tight")
-            
-            # save as image
-            # pred_grid = make_grid(pred_img, nrow=11)
-            # gt_grid = make_grid(gt_img, nrow=11)
-            
-            # if not os.path.isdir(config.CHECKPOINT_RESULT_DIR):
-            #     os.mkdir(config.CHECKPOINT_RESULT_DIR)
-                
-            # plt.imsave(os.path.join(config.CHECKPOINT_RESULT_DIR, 'gt_{}.jpg'.format(batch_idx)), gt_grid[0, :, :])
-            # plt.imsave(os.path.join(config.CHECKPOINT_RESULT_DIR, 'pred_{}.jpg'.format(batch_idx)), pred_grid[0, :, :])
-            # save_image(pred_grid, os.path.join(config.CHECKPOINT_RESULT_DIR, 'pred_{}.jpg'.format(batch_idx)))
-            # save_image(gt_grid, os.path.join(config.CHECKPOINT_RESULT_DIR, 'gt_{}.jpg'.format(batch_idx)))
-        
+
         self.list_dose_metric.append(dose_dif)
         return {"dose_dif": dose_dif}
 
-
     def test_epoch_end(self, outputs):
-        
+
         mean_dose_metric = np.stack([x["dose_dif"] for x in outputs]).mean()
         std_dose_metric = np.stack([x["dose_dif"] for x in outputs]).std()
         print(np.min(std_dose_metric))
-        # mean_dvh_metric = torch.stack(self.list_DVH_dif).mean()
         mean_dvh_metric = np.mean(self.list_DVH_dif)
         std_dvh_metric = np.std(self.list_DVH_dif)
         print(np.min(self.list_DVH_dif))
-        # for key in self.dict_DVH_dif.keys():
-        #     for metric in self.dict_DVH_dif[key]:
-        #         self.dict_DVH_dif[key][metric] = np.mean(self.dict_DVH_dif[key][metric])
-        
+
         print(mean_dose_metric, mean_dvh_metric)
         print('----------------------Difference DVH for each structures---------------------')
         print(self.dict_DVH_dif)
-        # print('----------------------predicted---------------------')
-        # print(self.pred_list_DVH)
-        
+
         self.ivs_values = np.array(self.ivs_values)
 
         self.log("mean_dose_metric", mean_dose_metric)
         self.log("std_dose_metric", std_dose_metric)
         self.log("mean_dvh_metric", mean_dvh_metric)
         self.log("std_dvh_metric", std_dvh_metric)
-        # self.logger.log_metrics({"mean_dose_score": mean_dose_score}, self.current_epoch + 1)
-        # self.logger.log_metrics({"val_loss": avg_loss}, self.current_epoch + 1)
         return self.dict_DVH_dif
 
 
@@ -394,8 +347,6 @@ def main(freez=True, delta1=10, delta2=8, run_id=None, run_name=None, ckpt_path=
         last_epoch=-1,
         freez=freez
     )
-    
-    # ckpt_path='/content/drive/MyDrive/results_thesis/ablation4_'
 
     # set up checkpoints
     checkpoint_callback = ModelCheckpoint(
@@ -410,48 +361,18 @@ def main(freez=True, delta1=10, delta2=8, run_id=None, run_name=None, ckpt_path=
     # set up logger
     if run_name is None:
         mlflow_logger = MLFlowLogger(
-            experiment_name='/Users/gheshlaghitara@gmail.com/dose_prediction_vitGen',
+            experiment_name='EXPERIMENT_NAME',
             tracking_uri="databricks",
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p'
-            # run_id = '3ac01f8630f345a2b38d813f67ad9a8e'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p2'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p3_32f'
-            # run_id = '63d2bc7b84754e17bae840fa6a0c01e3'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p_raytune'
-            # run_id = 'b8a4d25100f346e6a8cc93cd91a3b0f6'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p_raytune_ex2'
-            # run_id = '9e2351b9cd194dffb805a34e5ed5a3f8'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p_raytune_ex3_batch2'
-            # run_id = 'de9478bb77c54c6599a23cea061e7ef9'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p_raytune_ex3_batch2_unfreez'
-            # run_id = 'b3c681bd0da74aafa56d8400707c870b'
-            # run_name = 'ablation4'
-            run_id = run_id
+            run_id=run_id
         )
     else:
         mlflow_logger = MLFlowLogger(
-            experiment_name='/Users/gheshlaghitara@gmail.com/dose_prediction_vitGen',
+            experiment_name='EXPERIMENT_NAME',
             tracking_uri="databricks",
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p'
-            # run_id = '3ac01f8630f345a2b38d813f67ad9a8e'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p2'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p3_32f'
-            # run_id = '63d2bc7b84754e17bae840fa6a0c01e3'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p_raytune'
-            # run_id = 'b8a4d25100f346e6a8cc93cd91a3b0f6'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p_raytune_ex2'
-            # run_id = '9e2351b9cd194dffb805a34e5ed5a3f8'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p_raytune_ex3_batch2'
-            # run_id = 'de9478bb77c54c6599a23cea061e7ef9'
-            # run_name = 'vitgen_multiS_dec_random_crop_300_p_raytune_ex3_batch2_unfreez'
-            # run_id = 'b3c681bd0da74aafa56d8400707c870b'
-            # run_name = 'ablation4'
-            run_name = run_name
+            run_name=run_name
         )
-    
+
     # {'act': 'mish', 'multiS_conv': True, 'lr': 0.0002840195762381102, 'weight_decay': 0.00021139244378558662
-    
-    # strategy = RayShardedStrategy(num_workers=1, num_cpus_per_worker=1, use_gpu=True)
 
     # initialise Lightning's trainer.
     trainer = pl.Trainer(
@@ -471,7 +392,7 @@ def main(freez=True, delta1=10, delta2=8, run_id=None, run_name=None, ckpt_path=
     )
 
     # train
-    # trainer.fit(net, datamodule=openkbp, ckpt_path='/content/drive/MyDrive/results_thesis/ablation4_/last.ckpt')
+    # trainer.fit(net, datamodule=openkbp, ckpt_path='SAVED_MODELS'+'/last.ckpt')
     if run_name is None:
         trainer.fit(net, datamodule=openkbp, ckpt_path=os.path.join(ckpt_path, 'last.ckpt'))
     else:

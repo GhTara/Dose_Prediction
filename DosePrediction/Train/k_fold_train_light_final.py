@@ -1,37 +1,22 @@
-import os
 import sys
 sys.path.insert(0, '/content/drive/.shortcut-targets-by-id/1G1XahkS3Mp6ChD2Q5kBTmR9Cb6B7JUPy/thesis/')
 from abc import ABC, abstractmethod
 
-from monai.inferers import sliding_window_inference
-from monai.data import CacheDataset, DataLoader, list_data_collate, decollate_batch
+from monai.data import CacheDataset, DataLoader, list_data_collate
 from monai.apps import CrossValidation
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.callbacks import TQDMProgressBar, ProgressBarBase
-from pytorch_lightning.callbacks.progress import RichProgressBar
-from pytorch_lightning.loggers import MLFlowLogger
-
-from torchvision.utils import make_grid
-from torchvision.utils import save_image
-import torchvision.transforms.functional as TF
 
 import gc
-import torch
 
 import bitsandbytes as bnb
 
-from typing import Optional
-
-import matplotlib.pyplot as plt
-
-from RTDosePrediction.Src.C3D.my_model import *
-# from RTDosePrediction.Src.C3D.model import *
-from RTDosePrediction.Src.DataLoader.dataloader_OpenKBP_C3D_monai import get_dataset
-import RTDosePrediction.Src.DataLoader.config as config
-from RTDosePrediction.Src.Evaluate.evaluate_openKBP import *
-from RTDosePrediction.Src.C3D.loss import Loss, GenLoss
+from DosePrediction.Train.my_model import *
+# from RTDosePrediction.DosePrediction.Train.model import *
+from DosePrediction.DataLoader.dataloader_OpenKBP_C3D_monai import get_dataset
+import DosePrediction.Train.config as config
+from DosePrediction.Evaluate.evaluate_openKBP import *
+from DosePrediction.Train.loss import GenLoss
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 torch.backends.cudnn.benchmark = True
@@ -90,7 +75,7 @@ class TestOpenKBPDataModule(pl.LightningDataModule):
         # Assign val datasets for use in dataloaders
 
         self.test_data = get_dataset(path=config.MAIN_PATH + config.VAL_DIR, state='test',
-                                    size=40, cache=True)
+                                     size=40, cache=True)
     def test_dataloader(self):
         return DataLoader(self.test_data, batch_size=1, shuffle=False,
                           num_workers=config.NUM_WORKERS, pin_memory=True)
@@ -446,9 +431,9 @@ def main(freez=True, start_fold=0, ckpt=None, id_db=None, is_test=False):
     else:
         # Load the MNIST dataset
         train_transforms, train_set = get_dataset(path=config.MAIN_PATH + config.TRAIN_DIR, state='train', cv=True,
-                                          size=200, cache=True)
+                                                  size=200, cache=True)
         val_transforms, val_set = get_dataset(path=config.MAIN_PATH + config.TRAIN_VAL_DIR, state='val', cv=True,
-                                          size=40, cache=True)
+                                              size=40, cache=True)
         # Define the number of folds for cross-validation
         # start_fold = 0
         num_fold = 6
@@ -480,7 +465,7 @@ def main(freez=True, start_fold=0, ckpt=None, id_db=None, is_test=False):
             #                         num_workers=config.NUM_WORKERS, collate_fn=list_data_collate, pin_memory=True)
             
             val_ds = cvdataset.get_dataset(folds=fold, transform=val_transforms)
-            val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, 
+            val_loader = DataLoader(val_ds, batch_size=1, shuffle=False,
                                     num_workers=config.NUM_WORKERS, pin_memory=True)
     
             # Initialise the LightningModule

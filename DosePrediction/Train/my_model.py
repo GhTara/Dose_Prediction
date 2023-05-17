@@ -15,10 +15,10 @@ from monai.networks.layers.factories import Act, Norm
 from monai.networks.layers.simplelayers import Reshape
 from monai.utils import ensure_tuple, ensure_tuple_rep
 
-from RTDosePrediction.Src.C3D.blocks_MDUNet import conv_3_1, DualDilatedBlock
-from UNet.models.nets.base_blocks import ModifiedUnetrUpBlock
+from DosePrediction.Train.blocks_MDUNet import conv_3_1, DualDilatedBlock
+from OARSegmentation.models.nets.base_blocks import ModifiedUnetrUpBlock
 from NetworkTrainer.network_trainer import *
-from RTDosePrediction.Src.C3D.baseline_model import BaseUNet
+from DosePrediction.Train.baseline_model import BaseUNet
 
 
 class AttGate(nn.Module):

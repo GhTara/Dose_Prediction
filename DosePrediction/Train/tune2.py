@@ -1,8 +1,6 @@
 import ray
-from pytorch_lightning.callbacks import ModelCheckpoint
-from ray.tune.schedulers import PopulationBasedTraining, MedianStoppingRule, ASHAScheduler
+from ray.tune.schedulers import ASHAScheduler
 from ray.tune.schedulers.pb2 import PB2
-from ray.tune.search.dragonfly import DragonflySearch
 from ray.tune.search.optuna import OptunaSearch
 
 from ray_lightning.tune import TuneReportCallback, get_tune_resources
@@ -10,11 +8,8 @@ from ray_lightning import RayStrategy
 from ray import tune
 from ray.tune.search.bayesopt import BayesOptSearch
 
-import pytorch_lightning as pl
-from pytorch_lightning.loggers import MLFlowLogger
-
-from RTDosePrediction.Src.C3D.train_light_final import *
-import RTDosePrediction.Src.DataLoader.config as config
+from DosePrediction.Train.train_light_final import *
+import DosePrediction.Train.config as config
 
 
 class TuneCascade(tune.Trainable):
@@ -42,7 +37,7 @@ class TuneCascade(tune.Trainable):
         
         # set up logger
         mlflow_logger = MLFlowLogger(
-            experiment_name='/Users/gheshlaghitara@gmail.com/dose-prediction-tune-hp',
+            experiment_name='EXPERIMENT_NAME',
             tracking_uri="databricks",
             # run_id = ''
         )

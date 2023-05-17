@@ -1,34 +1,21 @@
-import os
 import sys
 import gc
 
 sys.path.insert(0, 'HOME_DIRECTORY')
 
-from monai.inferers import sliding_window_inference
-from monai.data import DataLoader, list_data_collate, decollate_batch
-
-from statistics import mean
-
-from torchvision.utils import make_grid
-from torchvision.utils import save_image
+from monai.data import DataLoader
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.callbacks import TQDMProgressBar, ProgressBarBase
-from pytorch_lightning.callbacks.progress import RichProgressBar
 from pytorch_lightning.loggers import MLFlowLogger
-
-import bitsandbytes as bnb
 
 from typing import Optional
 
-import matplotlib.pyplot as plt
-
-from RTDosePrediction.Src.C3D.baseline_model import *
+from RTDosePrediction.Src.Train.baseline_model import *
 from RTDosePrediction.Src.DataLoader.dataloader_OpenKBP_C3D_monai import get_dataset
-import RTDosePrediction.Src.DataLoader.config as config
+import RTDosePrediction.Src.Train.config as config
 from RTDosePrediction.Src.Evaluate.evaluate_openKBP import *
-from RTDosePrediction.Src.C3D.loss import Loss
+from RTDosePrediction.Src.Train.loss import Loss
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 torch.backends.cudnn.benchmark = True
@@ -305,7 +292,7 @@ class CascadeUNet(pl.LightningModule):
         print(len(self.list_DVH_dif))
         torch.cuda.empty_cache()
         # if False:
-        ckp_re_dir = '/content/drive/MyDrive/results_thesis_images/baseline'
+        ckp_re_dir = 'IMAGES_DIRECTORY' + '/baseline'
         if batch_idx < 100:
             plot_DVH(prediction, batch_data, path=os.path.join(ckp_re_dir, 'dvh_{}.png'.format(batch_idx)))
             torch.cuda.empty_cache()
@@ -408,11 +395,10 @@ def main(freez=True):
 
     # set up logger
     mlflow_logger = MLFlowLogger(
-        experiment_name='/Users/gheshlaghitara@gmail.com/dose_prediction',
+        experiment_name='EXPERIMENT_NAME',
         tracking_uri="databricks",
-        # run_id = '6a05e2a3f2654acfa72790887c3880f9'
-        # run_name = 'baseline_final_freez'
-        run_id='2ac602cc16a049b2a7a408cd851fdcd0'
+        # run_name = 'RUN_NAME'
+        run_id = 'RUN_ID'
     )
 
     # initialise Lightning's trainer.

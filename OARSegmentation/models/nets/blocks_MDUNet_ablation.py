@@ -141,16 +141,16 @@ class DualDilatedBlock(nn.Module):
 
 
 
-def test():
-    model = MSU_Net(img_ch=1, output_ch=1)
-    vol1 = torch.randn((1, 1, 64, 64, 64))
-    # vol2 = torch.randn((1, 3, 128, 128, 128))
-    # out.shape : (1, 3, 128, 128, 128)
-
-    # pred = model(vol1, vol2)
-    pred = model(vol1)
-    print(pred.shape)
-
-
-if __name__ == '__main__':
-    test()
+# def test():
+#     model = MSU_Net(img_ch=1, output_ch=1)
+#     vol1 = torch.randn((1, 1, 64, 64, 64))
+#     # vol2 = torch.randn((1, 3, 128, 128, 128))
+#     # out.shape : (1, 3, 128, 128, 128)
+#
+#     # pred = model(vol1, vol2)
+#     pred = model(vol1)
+#     print(pred.shape)
+#
+#
+# if __name__ == '__main__':
+#     test()

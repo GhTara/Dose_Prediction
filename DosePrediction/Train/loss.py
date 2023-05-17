@@ -3,8 +3,6 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import interpolate
 
-import RTDosePrediction.Src.DataLoader.config as config
-
 
 class Loss(nn.Module):
     def __init__(self, casecade=True):

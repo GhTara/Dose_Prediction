@@ -15,9 +15,9 @@ from monai.networks.layers.factories import Act, Norm
 from monai.networks.layers.simplelayers import Reshape
 from monai.utils import ensure_tuple, ensure_tuple_rep
 
-from UNet.models.nets.base_blocks_ablation import ModifiedUnetrUpBlock
-from RTDosePrediction.Src.C3D.baseline_model import BaseUNet
-
+from OARSegmentation.models.nets.blocks_MDUNet_ablation import conv_3_1, DualDilatedBlock
+from OARSegmentation.models.nets.base_blocks_ablation import ModifiedUnetrUpBlock
+from DosePrediction.Train.baseline_model import BaseUNet
 
 
 ##############################
@@ -501,7 +501,6 @@ class VitGenerator(nn.Module):
             outputs.append(convertor(out_dec))
 
         return outputs
-
 
 
 class SharedEncoderModel(nn.Module):
@@ -1116,120 +1115,3 @@ class SharedUNetRModelA(nn.Module):
 
         return outA, outA
 
-
-def test():
-    # generator = SharedUNetModel(in_ch=9, out_ch=1,
-    #                             list_ch=[-1, 16, 32, 64, 128, 256, 512],
-    #                             mode_decoder=2,
-    #                             mode_encoder=2)
-    # generator = SharedUNetRModelA(
-    #     in_channels_a=9,
-    #     in_channels_b=9,
-    #     out_channels=1,
-    #     img_size=(128, 128, 128),
-    #     # 16 => 4
-    #     feature_size=16,
-    #     hidden_size=768,
-    #     mlp_dim=3072,
-    #     num_heads=12,
-    #     pos_embed="perceptron",
-    #     norm_name="instance",
-    #     res_block=True,
-    #     conv_block=True,
-    #     dropout_rate=0.0,
-    # )
-    # encoder = ViTSharedEncoder(
-    #     in_channels=9,
-    #     img_size=(128, 128, 128),
-    #     # 16 => 4
-    #     feature_size=16,
-    #     hidden_size=768,
-    #     mlp_dim=3072,
-    #     num_heads=12,
-    #     num_layers=12,
-    #     pos_embed="perceptron",
-    #     norm_name="instance",
-    #     res_block=True,
-    #     conv_block=True,
-    #     dropout_rate=0.0,
-    # )
-    # decoder = MonaiSharedDecoder(
-    #     feature_size=16,
-    #     hidden_size=768,
-    # )
-
-    # model = SharedEncoderModel(
-    #     in_ch=9,
-    #     out_ch=1,
-    #     mode_decoder=1,
-    #     mode_encoder=1,
-    #     img_size=(128, 128, 128),
-    #     num_layers=4,  # 4, 8, 12
-    #     num_heads=6  # 3, 6, 12
-    # )
-
-    # generator = VitGenerator(
-    #     in_ch=9,
-    #     out_ch=1,
-    #     mode_decoder=1,
-    #     mode_encoder=1,
-    #     feature_size=16,
-    #     img_size=(128, 128, 128),
-    #     num_layers=8,  # 4, 8, 12
-    #     num_heads=6,  # 3, 6, 12
-    #     act='mish',
-    #     mode_multi_dec=False
-    # )
-
-    generator = create_pretrained_unet(
-        in_ch=9, out_ch=1,
-        list_ch_A=[-1, 16, 32, 64, 128, 256],
-        list_ch_B=[-1, 32, 64, 128, 256, 512],
-        ckpt_file='NetworkTrainer/C3D_bs4_iter80000.pkl',
-        mode_decoder=1,
-        mode_encoder=1,
-        feature_size=16,
-        img_size=(128, 128, 128),
-        num_layers=8,  # 4, 8, 12
-        num_heads=6,  # 3, 6, 12
-        act='mish',
-        mode_multi_dec=False,
-    )
-
-    # regressor = ResnetRegressor()
-    # net, pretrained_params = create_pretrained_medical_resnet(
-    #     'D:/python_code/thesis_final/dose_prediction/resnet_34_23dataset.pth', model_constructor=resnet34)
-    # pretrained_params = set(pretrained_params) if pretrained_params else set()
-    # for n, param in net.named_parameters():
-    #     print(param.requires_grad, bool(n not in pretrained_params))
-    #         # param.requires_grad = bool(n not in self.pretrained_params)
-    inp = torch.randn((1, 9, 128, 128, 128))
-    out = generator(inp)[1]
-    # for o in out:
-    print(out.shape)
-
-    # inp = torch.randn((1, 9, 128, 128, 128))
-    # out_gen = generator(inp)
-    # print(out_gen.shape)
-
-    # net = AttRegressor((10, 128, 128, 128),
-    #                    channels=(16, 32, 64, 128, 1), strides=(1, 2, 2, 2, 1), padding=(1, 1, 1, 1, 1),
-    #                    kernel_size=(3, 4, 4, 4, 3), num_res_units=0, std_noise=0.01)
-    # init_weights(net, init_type='normal')
-
-    # att_block = AttGate2022(in_ch=1, num_res_units=-1)
-    # out = att_block(inp, inp)
-    # print(out.shape)
-
-    # [x2a, x4a, x6a, x8a, x10a] = encoder(inp)
-    # [x2a, x4a, x6a, x8a] = decoder([x2a, x4a, x6a, x8a, x10a])
-    # print(x2a.shape, x4a.shape, x6a.shape, x8a.shape)
-    # print(x2a.shape, x4a.shape, x6a.shape, x8a.shape, x10a.shape)
-    # out = net(out_gen, inp)
-    # print(out[0].shape, out[1].shape, out[2].shape, out[3].shape)
-    # print(len(out[1:]))
-    # print(dec1.shape)
-
-
-if __name__ == '__main__':
-    test()
