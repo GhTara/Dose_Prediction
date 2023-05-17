@@ -4,8 +4,10 @@ import time
 import torch
 import torch.nn as nn
 from torch import optim
-
-
+'''
+Used for training the baseline according its repository: 
+https://github.com/LSL000UD/RTDosePrediction 
+'''
 class TrainerSetting:
     def __init__(self):
         self.project_name = None
