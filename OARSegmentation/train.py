@@ -134,7 +134,7 @@ class litAutoSeg(pl.LightningModule):
             )
 
         if pretrain:
-            pre_model = torch.load('pretrained_models/OARSegmentation/epoch=399-step=32000.ckpt')
+            pre_model = torch.load('PretrainedModels/OARSegmentation/epoch=399-step=32000.ckpt')
             model_dict = self._model.state_dict()
             keyss = list(pre_model['state_dict'].keys())
             for k in keyss:

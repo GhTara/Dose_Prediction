@@ -155,7 +155,7 @@ class GANMultiDisc(pl.LightningModule):
         # )
 
         self.discriminator, self.pretrained_params = create_pretrained_medical_resnet(
-            'pretrained_models/resnet_10_23dataset.pth', model_constructor=resnet10,
+            'PretrainedModels/resnet_10_23dataset.pth', model_constructor=resnet10,
             num_classes=2, n_input_channels=1, spatial_dims=3)
 
         self.pretrained_params = set(self.pretrained_params)

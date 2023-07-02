@@ -90,7 +90,7 @@ class CascadeUNet(pl.LightningModule):
             in_ch=9, out_ch=1,
             list_ch_A=[-1, 16, 32, 64, 128, 256],
             list_ch_B=[-1, 32, 64, 128, 256, 512],
-            ckpt_file='HOME_DIRECTORY' + '/pretrained_models/baseline/C3D_bs4_iter80000.pkl', )
+            ckpt_file='HOME_DIRECTORY' + '/PretrainedModels/baseline/C3D_bs4_iter80000.pkl', )
 
         if freez:
             for n, param in self.model_.named_parameters():
