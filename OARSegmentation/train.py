@@ -3,35 +3,26 @@ import sys
 
 sys.path.insert(0, 'HOME_DIRECTORY')
 
-import numpy as np
-
 import torch
-
-from torchvision.utils import make_grid
-from torchvision.utils import save_image
 
 from monai.inferers import sliding_window_inference
 from monai.data import DataLoader, list_data_collate, decollate_batch
 from monai.losses import DiceCELoss
-from monai.metrics import DiceMetric, HausdorffDistanceMetric, get_confusion_matrix
-from monai.networks.nets import UNet, UNETR
-from monai.config import print_config
+from monai.metrics import DiceMetric, HausdorffDistanceMetric
+from monai.networks.nets import UNETR
 
 import OARSegmentation.config as config
-from OARSegmentation.provided_dataset import get_dataset
+from OARSegmentation.DataLoader.provided_dataset import get_dataset
 # from private_dataset import get_dataset
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 # from pytorch_lightning.callbacks import TQDMProgressBar, ProgressBarBase
-from pytorch_lightning.callbacks.progress import RichProgressBar
 from pytorch_lightning.loggers import MLFlowLogger
 
-import json
 from typing import Optional
-import matplotlib.pyplot as plt
 
-from OARSegmentation.old_models.networks.modified_unetr import ModifiedUNETR
+from OARSegmentation.OldModels.Networks.modified_unetr import ModifiedUNETR
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 torch.backends.cudnn.benchmark = True

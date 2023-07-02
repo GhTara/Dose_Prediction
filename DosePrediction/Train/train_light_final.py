@@ -12,7 +12,7 @@ from pytorch_lightning.loggers import MLFlowLogger
 
 import bitsandbytes as bnb
 
-from DosePrediction.Train.proposed_dose_model import *
+from DosePrediction.Models.Networks.proposed_dose_model import *
 # from RTDosePrediction.DosePrediction.Train.model import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
 import DosePrediction.Train.config as config

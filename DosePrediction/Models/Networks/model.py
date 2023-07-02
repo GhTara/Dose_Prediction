@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from monai.networks.nets.vit import ViT
 from monai.utils import ensure_tuple_rep
 
-from DosePrediction.Train.blocks_MDUNet import conv_3_1, DualDilatedBlock
+from DosePrediction.Models.Nets.blocks_MDUNet import conv_3_1, DualDilatedBlock
 # from DosePrediction.Train.model_monai import *
 
 

@@ -3,11 +3,11 @@ import torch.nn as nn
 from typing import Optional, Sequence, Tuple, Union
 
 from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetResBlock
-# from monai.networks.layers.factories import Act, Norm
+# from monai.Networks.layers.factories import Act, Norm
 from monai.networks.blocks.dynunet_block import get_conv_layer
 
-from OARSegmentation.models.nets.utils import get_multi_conv_layer
-from OARSegmentation.models.nets.blocks_MDUNet_ablation import conv_3_1, DualDilatedBlock
+from OARSegmentation.OldModels.Nets.utils import get_multi_conv_layer
+from OARSegmentation.OldModels.Nets.blocks_MDUNet import conv_3_1
 
 
 class MultiUnetBasicBlock(nn.Module):
@@ -16,13 +16,10 @@ class MultiUnetBasicBlock(nn.Module):
             self,
             in_channels: int,
             out_channels: int,
-            multiS_conv=True,
-            act='relu',
     ):
         super().__init__()
 
-        self.cov_ = conv_3_1(ch_in=in_channels, ch_out=out_channels, act=act) if multiS_conv else DualDilatedBlock(
-            ch_in=in_channels, ch_out=out_channels, act=act)
+        self.cov_ = conv_3_1(ch_in=in_channels, ch_out=out_channels)
 
     def forward(self, inp):
         out = self.cov_(inp)
@@ -101,9 +98,6 @@ class ModifiedUnetrUpBlock(nn.Module):
             in_channels: int,
             out_channels: int,
             upsample_kernel_size: Union[Sequence[int], int],
-            act='relu',
-            norm='instance',
-            multiS_conv=True
     ) -> None:
         """
         Args:
@@ -115,7 +109,6 @@ class ModifiedUnetrUpBlock(nn.Module):
 
         super().__init__()
         upsample_stride = upsample_kernel_size
-        self.act = act
         self.transp_conv = get_conv_layer(
             spatial_dims,
             in_channels,
@@ -124,15 +117,12 @@ class ModifiedUnetrUpBlock(nn.Module):
             stride=upsample_stride,
             conv_only=True,
             is_transposed=True,
-            norm=norm
         )
 
         self.conv_block = MultiUnetBasicBlock(  # type: ignore
-            out_channels + out_channels,
-            out_channels,
-            act=act,
-            multiS_conv=multiS_conv,
-        )
+                out_channels + out_channels,
+                out_channels,
+            )
 
     def forward(self, inp, skip):
         # number of channels for skip should equals to out_channels
@@ -281,43 +271,3 @@ class ModifiedUnetrPrUpBlock(nn.Module):
     def forward(self, x):
         x = self.transp_conv_init(x)
         return x
-
-
-def test():
-    feature_size: int = 16
-    hidden_size: int = 768
-    norm_name: Union[Tuple, str] = "instance"
-    res_block: bool = True
-    spatial_dims: int = 3
-    out_channels = 3
-    # model = ModifiedUnetrUpBlock(
-    #     spatial_dims=spatial_dims,
-    #     in_channels=2,
-    #     out_channels=3,
-    #     kernel_size=3,
-    #     upsample_kernel_size=2,
-    #     norm_name=norm_name,
-    #     res_block=res_block, )
-    model = ModifiedUnetrPrUpBlock(
-        spatial_dims=spatial_dims,
-        in_channels=hidden_size,
-        out_channels=feature_size * 2,
-        num_layer=2,
-        kernel_size=3,
-        stride=1,
-        upsample_kernel_size=2,
-        norm_name=norm_name,
-        conv_block=True,
-        res_block=True,
-    )
-    vol1 = torch.randn((1, 768, 64, 64, 64))
-    vol2 = torch.randn((1, 3, 128, 128, 128))
-    # out.shape : (1, 3, 128, 128, 128)
-
-    # pred = model(vol1, vol2)
-    pred = model(vol1)
-    print(pred.shape)
-
-
-if __name__ == '__main__':
-    test()

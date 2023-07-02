@@ -12,7 +12,7 @@ from pytorch_lightning.loggers import MLFlowLogger
 
 import bitsandbytes as bnb
 
-from DosePrediction.Train.model_ablation import *
+from DosePrediction.Models.Networks.model_ablation import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
 import DosePrediction.Train.config as config
 from DosePrediction.Evaluate.evaluate_openKBP import *

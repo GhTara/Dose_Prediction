@@ -21,7 +21,7 @@ class TrainerSetting:
         self.max_epoch = 99999999
 
         # Default not use this,
-        # because the models of "best_train_loss", "best_val_evaluation_index", "latest" have been saved.
+        # because the Models of "best_train_loss", "best_val_evaluation_index", "latest" have been saved.
         self.save_per_epoch = 99999999
         self.eps_train_loss = 0.01
 

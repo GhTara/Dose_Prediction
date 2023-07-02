@@ -3,11 +3,11 @@ import torch.nn as nn
 from typing import Optional, Sequence, Tuple, Union
 
 from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetResBlock
-# from monai.networks.layers.factories import Act, Norm
+# from monai.Networks.layers.factories import Act, Norm
 from monai.networks.blocks.dynunet_block import get_conv_layer
 
-from OARSegmentation.models.nets.utils import get_multi_conv_layer
-from OARSegmentation.models.nets.blocks_MDUNet import conv_3_1, DualDilatedBlock
+from OARSegmentation.Models.Nets.utils import get_multi_conv_layer
+from OARSegmentation.Models.Nets.blocks_MDUNet import conv_3_1, DualDilatedBlock
 
 
 class MultiUnetBasicBlock(nn.Module):

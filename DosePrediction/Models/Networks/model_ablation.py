@@ -15,8 +15,8 @@ from monai.networks.layers.factories import Act, Norm
 from monai.networks.layers.simplelayers import Reshape
 from monai.utils import ensure_tuple, ensure_tuple_rep
 
-from OARSegmentation.models.nets.blocks_MDUNet_ablation import conv_3_1, DualDilatedBlock
-from OARSegmentation.models.nets.base_blocks_ablation import ModifiedUnetrUpBlock
+from OARSegmentation.Models.Nets.blocks_MDUNet_ablation import conv_3_1, DualDilatedBlock
+from OARSegmentation.Models.Nets.base_blocks_ablation import ModifiedUnetrUpBlock
 from DosePrediction.Train.baseline_model import BaseUNet
 
 
