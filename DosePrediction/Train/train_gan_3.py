@@ -15,7 +15,7 @@ from torch.nn import init
 
 import bitsandbytes as bnb
 
-from DosePrediction.Models.Networks.proposed_dose_model import *
+from DosePrediction.Models.Networks.dose_pyfer import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
 import DosePrediction.Train.config as config
 from DosePrediction.Evaluate.evaluate_openKBP import *
@@ -133,7 +133,7 @@ class GANMultiDisc(pl.LightningModule):
         self.save_hyperparameters()
         # seed_everything()
 
-        self.generator = VitGenerator(
+        self.generator = MainSubsetModel(
             in_ch=9,
             out_ch=1,
             mode_decoder=1,

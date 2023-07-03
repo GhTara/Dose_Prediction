@@ -8,7 +8,7 @@ from monai.transforms import (
 )
 import multiprocessing
 
-
+sys.path.insert(0, 'HOME_DIRECTORY')
 Device = "cuda" if torch.cuda.is_available() else "cpu"
 Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 TRAIN_SIZE = 200

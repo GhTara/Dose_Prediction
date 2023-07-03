@@ -11,7 +11,7 @@ from pytorch_lightning.loggers import MLFlowLogger
 
 from typing import Optional
 
-from DosePrediction.Train.baseline_model import *
+from DosePrediction.Models.Networks.c3d import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
 import DosePrediction.Train.config as config
 from DosePrediction.Evaluate.evaluate_openKBP import *

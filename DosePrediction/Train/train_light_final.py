@@ -1,21 +1,18 @@
-import sys
+import DosePrediction.Train.config as config
 import gc
+from typing import Optional
 
-sys.path.insert(0, 'HOME_DIRECTORY')
 
 from monai.data import DataLoader, list_data_collate
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import MLFlowLogger
-# from ray_lightning import RayShardedStrategy
 
 import bitsandbytes as bnb
 
-from DosePrediction.Models.Networks.proposed_dose_model import *
-# from RTDosePrediction.DosePrediction.Train.model import *
+from DosePrediction.Models.Networks.dose_pyfer import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
-import DosePrediction.Train.config as config
 from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
 
@@ -26,6 +23,8 @@ torch.backends.cudnn.benchmark = True
 class OpenKBPDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
+        self.train_data = None
+        self.val_data = None
 
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
@@ -63,29 +62,11 @@ class CascadeUNet(pl.LightningModule):
     def __init__(
             self,
             config_param,
-            lr_scheduler_type='cosine',
-            # Adam hp
-            lr: float = 3e-4,
-            lr_encoder: float = None,
-            lr_decoder: float = None,
-            weight_decay: float = 1e-4,
-            b1: float = 0.5,
-            b2: float = 0.999,
-            # Cosine hp
-            eta_min=None,
-            # Step hp
-            milestones=None,
-            gamma=None,
-            last_epoch=None,
-            # ReduceLROnPlateau hp
-            factor=None,
-            patience=None,
-            threshold=None,
-            freez=True
+            freeze=True
     ):
         super().__init__()
         self.config_param = config_param
-        self.freez = freez
+        self.freeze = freeze
         self.save_hyperparameters()
 
         # OAR + PTV + CT => dose
@@ -93,10 +74,7 @@ class CascadeUNet(pl.LightningModule):
         self.model_, inside = create_pretrained_unet(
             in_ch=9, out_ch=1,
             list_ch_A=[-1, 16, 32, 64, 128, 256],
-            list_ch_B=[-1, 32, 64, 128, 256, 512],
             ckpt_file='HOME_DIRECTORY' + '/PretrainedModels/baseline/C3D_bs4_iter80000.pkl',
-            mode_decoder=1,
-            mode_encoder=1,
             feature_size=16,
             img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
             num_layers=8,  # 4, 8, 12
@@ -107,7 +85,7 @@ class CascadeUNet(pl.LightningModule):
             # multiS_conv=True,
             multiS_conv=config_param["multiS_conv"], )
 
-        if freez:
+        if freeze:
             for n, param in self.model_.named_parameters():
                 if 'net_A' in n or 'conv_out_A' in n:
                     param.requires_grad = False
@@ -156,7 +134,7 @@ class CascadeUNet(pl.LightningModule):
         output = self(input_)
         torch.cuda.empty_cache()
 
-        loss = self.loss_function(output, target, casecade=True, freez=self.freez,
+        loss = self.loss_function(output, target, casecade=True, freez=self.freeze,
                                   delta1=self.config_param['delta1'], delta2=self.config_param['delta2'])
 
         if self.moving_train_loss is None:
@@ -186,12 +164,10 @@ class CascadeUNet(pl.LightningModule):
         gt_dose = np.array(target[:, :1, :, :, :].cpu())
         possible_dose_mask = np.array(target[:, 1:, :, :, :].cpu())
 
-        roi_size = (config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE)
-
         prediction = self.forward(input_)
 
         torch.cuda.empty_cache()
-        loss = self.loss_function(prediction[1][0], target, mode='val', casecade=True, freez=self.freez)
+        loss = self.loss_function(prediction[1][0], target, mode='val', casecade=True, freez=self.freeze)
 
         prediction_b = np.array(prediction[1][0].cpu())
 
@@ -342,10 +318,7 @@ def main(freez=True, delta1=10, delta2=8, run_id=None, run_name=None, ckpt_path=
     }
     net = CascadeUNet(
         config_param,
-        lr_scheduler_type='cosine',
-        eta_min=1e-7,
-        last_epoch=-1,
-        freez=freez
+        freeze=freez
     )
 
     # set up checkpoints

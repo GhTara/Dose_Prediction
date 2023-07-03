@@ -1,4 +1,5 @@
 import sys
+from typing import Optional
 
 sys.path.insert(0, 'HOME_DIRECTORY')
 
