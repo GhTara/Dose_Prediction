@@ -8,7 +8,7 @@ from ray_lightning import RayStrategy
 from ray import tune
 from ray.tune.search.bayesopt import BayesOptSearch
 
-from DosePrediction.Train.train_light_final import *
+from DosePrediction.Train.train_light_pyfer import *
 import DosePrediction.Train.config as config
 
 
@@ -18,11 +18,11 @@ class TuneCascade(tune.Trainable):
     def setup(self, config_hparam):
         self.config_hparam = config_hparam
         self.data = OpenKBPDataModule()
-        self.model = CascadeUNet(self.config_hparam,
-                                 lr_scheduler_type='cosine',
-                                 eta_min=1e-7,
-                                 last_epoch=-1
-                                 )
+        self.model = Pyfer(self.config_hparam,
+                           lr_scheduler_type='cosine',
+                           eta_min=1e-7,
+                           last_epoch=-1
+                           )
         metrics = {"loss": "val_loss"}
         callbacks = [TuneReportCallback(metrics, on="validation_end"),
                      # ModelCheckpoint(

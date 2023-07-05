@@ -1,7 +1,5 @@
-import sys
+import DosePrediction.Train.config as config
 from typing import Optional
-
-sys.path.insert(0, 'HOME_DIRECTORY')
 
 from monai.inferers import sliding_window_inference
 from monai.data import DataLoader, list_data_collate
@@ -15,7 +13,6 @@ import bitsandbytes as bnb
 
 from DosePrediction.Models.Networks.model_ablation import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
-import DosePrediction.Train.config as config
 from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
 
@@ -33,6 +30,8 @@ class LitProgressBar(TQDMProgressBar):
 class OpenKBPDataModule(pl.LightningDataModule):
     def __init__(self, crop_flag, image_size):
         super().__init__()
+        self.val_data = None
+        self.train_data = None
         self.crop_flag = crop_flag
         self.image_size = image_size
 
@@ -59,7 +58,6 @@ class TestOpenKBPDataModule(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         # Assign val datasets for use in dataloaders
-
         self.test_data = get_dataset(path=config.MAIN_PATH + config.VAL_DIR, state='test',
                                      size=20, cache=True)
 
@@ -68,28 +66,10 @@ class TestOpenKBPDataModule(pl.LightningDataModule):
                           num_workers=config.NUM_WORKERS, pin_memory=True)
 
 
-class CascadeUNet(pl.LightningModule):
+class TestModel(pl.LightningModule):
     def __init__(
             self,
             config_param,
-            lr_scheduler_type='cosine',
-            # Adam hp
-            lr: float = 3e-4,
-            lr_encoder: float = None,
-            lr_decoder: float = None,
-            weight_decay: float = 1e-4,
-            b1: float = 0.5,
-            b2: float = 0.999,
-            # Cosine hp
-            eta_min=None,
-            # Step hp
-            milestones=None,
-            gamma=None,
-            last_epoch=None,
-            # ReduceLROnPlateau hp
-            factor=None,
-            patience=None,
-            threshold=None,
             image_size=128,
             sw_batch_size=1,
             huber=False,
@@ -137,7 +117,6 @@ class CascadeUNet(pl.LightningModule):
         #                         mode_decoder=2,
         #                         mode_encoder=2)
 
-        # change size of the image: 96
         self.model_ = VitGenerator(
             in_ch=9,
             out_ch=1,
@@ -148,9 +127,7 @@ class CascadeUNet(pl.LightningModule):
             num_layers=8,  # 4, 8, 12
             num_heads=6,  # 3, 6, 12,
             mode_multi_dec=True,
-            # act='mish',
             act=config_param["act"],
-            # multiS_conv=True,
             multiS_conv=config_param["multiS_conv"], )
 
         # self.model_ = SharedEncoderModel(in_ch=9,
@@ -177,13 +154,12 @@ class CascadeUNet(pl.LightningModule):
         #                   mode_encoder_A=1,
         #                   mode_encoder_B=2)
 
-        # self.lr_scheduler_type = lr_scheduler_type
-        self.lr_scheduler_type = config_param["lr"]
+        self.lr = config_param["lr"]
         self.weight_decay = config_param["weight_decay"]
 
         self.loss_function = GenLoss(im_size=image_size)
         self.huber = huber
-        # Moving average loss, loss is the smaller the better
+        # Moving average loss, loss is the smaller, the better
         self.eps_train_loss = 0.01
 
         self.best_average_val_index = -99999999.
@@ -195,15 +171,10 @@ class CascadeUNet(pl.LightningModule):
         self.train_epoch_loss = []
 
         self.max_epochs = 1300
-        # self.max_epochs = 150
-        # 10
         self.check_val = 5
-        # 5
         self.warmup_epochs = 1
 
         self.image_size = image_size
-        # self.img_width = image_size
-        # self.img_depth = image_size
 
         self.sw_batch_size = sw_batch_size
 
@@ -291,7 +262,7 @@ class CascadeUNet(pl.LightningModule):
         return {"log": tensorboard_logs}
 
     def configure_optimizers(self):
-        optimizer = bnb.optim.Adam8bit(self.model_.parameters(), lr=self.lr_scheduler_type,
+        optimizer = bnb.optim.Adam8bit(self.model_.parameters(), lr=self.lr,
                                        weight_decay=self.weight_decay)
         return optimizer
 
@@ -313,57 +284,53 @@ class CascadeUNet(pl.LightningModule):
         prediction[np.logical_or(possible_dose_mask < 1, prediction < 0)] = 0
         prediction = 80. * prediction
 
-        dose_dif, DVH_dif, self.dict_DVH_dif, ivs_values = get_Dose_score_and_DVH_score_batch(
+        dose_dif, dvh_dif, self.dict_DVH_dif, ivs_values = get_Dose_score_and_DVH_score_batch(
             prediction, batch_data, list_DVH_dif=self.list_DVH_dif, dict_DVH_dif=self.dict_DVH_dif, ivs_values=None)
-        self.list_DVH_dif.append(DVH_dif)
+        self.list_DVH_dif.append(dvh_dif)
 
         torch.cuda.empty_cache()
-        # if False:
-        ckp_re_dir = os.path.join('YourSampleImages/DosePrediction' + 'ablation')
-        if batch_idx < 12:
-            plot_DVH(prediction, batch_data, path=os.path.join(ckp_re_dir, 'dvh_{}.png'.format(batch_idx)))
+        save_results = True
+        if save_results:
+            ckp_re_dir = os.path.join('YourSampleImages/DosePrediction' + 'ablation')
+            if batch_idx < 12:
+                plot_DVH(prediction, batch_data, path=os.path.join(ckp_re_dir, 'dvh_{}.png'.format(batch_idx)))
 
-            prediction_b = prediction.cpu()
+                # Post-processing and evaluation
+                gt_dose[possible_dose_mask < 1] = 0
 
-            # Post-processing and evaluation
-            # prediction[torch.logical_or(possible_dose_mask < 1, prediction < 0)] = 0
-            # for save image
-            gt_dose[possible_dose_mask < 1] = 0
+                predicted_img = torch.permute(prediction[0].cpu(), (1, 0, 2, 3))
+                gt_img = torch.permute(gt_dose[0], (1, 0, 2, 3))
+                name_p = batch_data['file_path'][0].split("/")[-2]
 
-            pred_img = torch.permute(prediction[0].cpu(), (1, 0, 2, 3))
-            gt_img = torch.permute(gt_dose[0], (1, 0, 2, 3))
-            name_p = batch_data['file_path'][0].split("/")[-2]
+                for i in range(len(predicted_img)):
+                    predicted_i = predicted_img[i][0].numpy()
+                    gt_i = 80. * gt_img[i][0].numpy()
+                    error = np.abs(gt_i - predicted_i)
 
-            for i in range(len(pred_img)):
-                pred_i = pred_img[i][0].numpy()
-                gt_i = 80. * gt_img[i][0].numpy()
-                error = np.abs(gt_i - pred_i)
+                    # Create a figure and axis object using Matplotlib
+                    fig, axs = plt.subplots(3, 1, figsize=(4, 10))
+                    plt.subplots_adjust(wspace=0, hspace=0)
 
-                # plt.figure("check", (12, 6))
-                # Create a figure and axis object using Matplotlib
-                fig, axs = plt.subplots(3, 1, figsize=(4, 10))
-                plt.subplots_adjust(wspace=0, hspace=0)
+                    # Display the ground truth array
+                    axs[0].imshow(gt_i, cmap='jet')
+                    # axs[0].set_title('Ground Truth')
+                    axs[0].axis('off')
 
-                # Display the ground truth array
-                axs[0].imshow(gt_i, cmap='jet')
-                # axs[0].set_title('Ground Truth')
-                axs[0].axis('off')
+                    # Display the prediction array
+                    axs[1].imshow(predicted_i, cmap='jet')
+                    # axs[1].set_title('Prediction')
+                    axs[1].axis('off')
 
-                # Display the prediction array
-                axs[1].imshow(pred_i, cmap='jet')
-                # axs[1].set_title('Prediction')
-                axs[1].axis('off')
+                    # Display the error map using a heatmap
+                    axs[2].imshow(error, cmap='jet')
+                    # axs[2].set_title('Error Map')
+                    axs[2].axis('off')
 
-                # Display the error map using a heatmap
-                heatmap = axs[2].imshow(error, cmap='jet')
-                # axs[2].set_title('Error Map')
-                axs[2].axis('off')
+                    save_dir = os.path.join(ckp_re_dir, '{}_{}'.format(name_p, batch_idx))
+                    if not os.path.isdir(save_dir):
+                        os.mkdir(save_dir)
 
-                save_dir = os.path.join(ckp_re_dir, '{}_{}'.format(name_p, batch_idx))
-                if not os.path.isdir(save_dir):
-                    os.mkdir(save_dir)
-
-                fig.savefig(os.path.join(save_dir, '{}.jpg'.format(i)), bbox_inches="tight")
+                    fig.savefig(os.path.join(save_dir, '{}.jpg'.format(i)), bbox_inches="tight")
 
         self.list_dose_metric.append(dose_dif)
         return {"dose_dif": dose_dif}
@@ -372,11 +339,7 @@ class CascadeUNet(pl.LightningModule):
 
         mean_dose_metric = np.stack([x["dose_dif"] for x in outputs]).mean()
         std_dose_metric = np.stack([x["dose_dif"] for x in outputs]).std()
-        print(np.min(std_dose_metric))
-        # mean_dvh_metric = torch.stack(self.list_DVH_dif).mean()
         mean_dvh_metric = np.mean(self.list_DVH_dif)
-        std_dvh_metric = np.std(self.list_DVH_dif)
-        print(np.min(self.list_DVH_dif))
         # for key in self.dict_DVH_dif.keys():
         #     for metric in self.dict_DVH_dif[key]:
         #         self.dict_DVH_dif[key][metric] = np.mean(self.dict_DVH_dif[key][metric])
@@ -384,23 +347,18 @@ class CascadeUNet(pl.LightningModule):
         print(mean_dose_metric, mean_dvh_metric)
         print('----------------------Difference DVH for each structures---------------------')
         print(self.dict_DVH_dif)
-        # print('----------------------predicted---------------------')
-        # print(self.pred_list_DVH)
 
         self.ivs_values = np.array(self.ivs_values)
 
         self.log("mean_dose_metric", mean_dose_metric)
         self.log("std_dose_metric", std_dose_metric)
-        self.log("mean_dvh_metric", mean_dvh_metric)
-        self.log("std_dvh_metric", std_dvh_metric)
-        # self.logger.log_metrics({"mean_dose_score": mean_dose_score}, self.current_epoch + 1)
-        # self.logger.log_metrics({"val_loss": avg_loss}, self.current_epoch + 1)
         return self.dict_DVH_dif
 
 
-def main(act, crop_flag, sw_batch_size, image_size, huber, resum, databricks, ckp):
-    # initialise the LightningModule
-    openkbp = OpenKBPDataModule(crop_flag=crop_flag, image_size=image_size)
+def main(act, crop_flag, sw_batch_size, image_size, huber, resume, databricks, ckp):
+
+    # Initialise the LightningModule
+    openkbp_ds = OpenKBPDataModule(crop_flag=crop_flag, image_size=image_size)
     config_param = {
         "num_layers": 8,
         "num_heads": 6,
@@ -409,29 +367,23 @@ def main(act, crop_flag, sw_batch_size, image_size, huber, resum, databricks, ck
         "lr": 3e-4,
         "weight_decay": 1e-4,
     }
-    net = CascadeUNet(
+    net = TestModel(
         config_param,
-        lr_scheduler_type='cosine',
-        lr=3e-4,
-        weight_decay=1e-4,
-        eta_min=1e-7,
-        last_epoch=-1,
         image_size=image_size,
         huber=huber,
         sw_batch_size=sw_batch_size,
     )
 
-    # set up checkpoints
+    # Set up checkpoints
     checkpoint_callback = ModelCheckpoint(
         dirpath=ckp,
         save_last=True, monitor="mean_dose_score", mode="max",
         every_n_epochs=net.check_val,
         auto_insert_metric_name=True,
-        #  filename=net.filename,
     )
 
-    # set up logger
-    if not resum:
+    # Set up logger
+    if not resume:
         mlflow_logger = MLFlowLogger(
             experiment_name='EXPERIMENT_NAME',
             tracking_uri="databricks",
@@ -444,7 +396,7 @@ def main(act, crop_flag, sw_batch_size, image_size, huber, resum, databricks, ck
             run_id=databricks
         )
 
-    # initialise Lightning's trainer.
+    # Initialise Lightning's trainer.
     trainer = pl.Trainer(
         devices=[0],
         accelerator="gpu",
@@ -452,21 +404,17 @@ def main(act, crop_flag, sw_batch_size, image_size, huber, resum, databricks, ck
         check_val_every_n_epoch=net.check_val,
         callbacks=[checkpoint_callback],
         logger=mlflow_logger,
-        # callbacks=RichProgressBar(),
-        # callbacks=[bar],
         default_root_dir=ckp,
         # enable_progress_bar=True,
         # log_every_n_steps=net.check_val,
     )
 
-    # train
-    # trainer.fit(net, datamodule=openkbp, ckpt_path=os.path.join(ckp, 'last.ckpt')')
-    # trainer.fit(net, datamodule=openkbp, ckpt_path=os.path.join(ckp, 'last.ckpt'))
-    if not resum:
-        trainer.fit(net, datamodule=openkbp)
+    # Train
+    if not resume:
+        trainer.fit(net, datamodule=openkbp_ds)
     else:
         trainer.fit(net,
-                    datamodule=openkbp,
+                    datamodule=openkbp_ds,
                     ckpt_path=os.path.join(ckp, 'last.ckpt'))
 
     return net

@@ -11,7 +11,7 @@ from ray_lightning.tune import TuneReportCallback, get_tune_resources
 from ray_lightning import RayStrategy
 from ray import tune
 
-from DosePrediction.Train.train_light_final import *
+from DosePrediction.Train.train_light_pyfer import *
 import DosePrediction.Train.config as config
 
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -35,11 +35,11 @@ def train_model(config_hparam,
                 num_workers=1,
                 use_gpu=True,
                 callbacks=None):
-    model = CascadeUNet(config_hparam,
-                        lr_scheduler_type='cosine',
-                        eta_min=1e-7,
-                        last_epoch=-1
-                        )
+    model = Pyfer(config_hparam,
+                  lr_scheduler_type='cosine',
+                  eta_min=1e-7,
+                  last_epoch=-1
+                  )
 
     callbacks = callbacks or [MyModelCheckpoint(monitor='val_loss')]
 

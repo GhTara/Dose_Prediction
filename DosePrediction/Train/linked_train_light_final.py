@@ -19,7 +19,7 @@ import DosePrediction.Train.config as dose_config
 from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
 
-from DosePrediction.Train.train_light_final import CascadeUNet
+from DosePrediction.Train.train_light_pyfer import Pyfer
 from OARSegmentation.train import litAutoSeg
 
 import DosePrediction.Train.config as config
@@ -84,7 +84,7 @@ class LinkedNet(pl.LightningModule):
         self.save_hyperparameters()
 
         # OAR + PTV + CT => dose
-        self.dose_model = CascadeUNet(config_param=config_param)
+        self.dose_model = Pyfer(config_param=config_param)
         new_weights = self.dose_model.state_dict()
         old_weights = torch.load(ckpt_file_path_dose)['state_dict']
 

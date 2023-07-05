@@ -1,21 +1,16 @@
-import sys
-
-sys.path.insert(0, 'HOME_DIRECTORY')
+import DosePrediction.Train.config as config
 from abc import ABC, abstractmethod
+import gc
+from typing import Optional
 
 from monai.data import CacheDataset, DataLoader, list_data_collate
 from monai.apps import CrossValidation
 
 import pytorch_lightning as pl
-
-import gc
-
 import bitsandbytes as bnb
 
 from DosePrediction.Models.Networks.dose_pyfer import *
-# from RTDosePrediction.DosePrediction.Train.model import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
-import DosePrediction.Train.config as config
 from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
 
@@ -50,6 +45,8 @@ class CVDataset(ABC, CacheDataset):
 class OpenKBPDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
+        self.val_data = None
+        self.train_data = None
 
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
@@ -83,33 +80,15 @@ class TestOpenKBPDataModule(pl.LightningDataModule):
                           num_workers=config.NUM_WORKERS, pin_memory=True)
 
 
-class CascadeUNet(pl.LightningModule):
+class KFoldPYFER(pl.LightningModule):
     def __init__(
             self,
             config_param,
-            lr_scheduler_type='cosine',
-            # Adam hp
-            lr: float = 3e-4,
-            lr_encoder: float = None,
-            lr_decoder: float = None,
-            weight_decay: float = 1e-4,
-            b1: float = 0.5,
-            b2: float = 0.999,
-            # Cosine hp
-            eta_min=None,
-            # Step hp
-            milestones=None,
-            gamma=None,
-            last_epoch=None,
-            # ReduceLROnPlateau hp
-            factor=None,
-            patience=None,
-            threshold=None,
-            freez=True
+            freeze=True
     ):
         super().__init__()
         self.config_param = config_param
-        self.freez = freez
+        self.freeze = freeze
         self.save_hyperparameters()
 
         # OAR + PTV + CT => dose
@@ -117,31 +96,25 @@ class CascadeUNet(pl.LightningModule):
         self.model_, inside = create_pretrained_unet(
             in_ch=9, out_ch=1,
             list_ch_A=[-1, 16, 32, 64, 128, 256],
-            list_ch_B=[-1, 32, 64, 128, 256, 512],
             ckpt_file='PretrainedModels/OARSegmentation/C3D_bs4_iter80000.pkl',
-            mode_decoder=1,
-            mode_encoder=1,
             feature_size=16,
             img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
-            num_layers=8,  # 4, 8, 12
-            num_heads=6,  # 3, 6, 12
-            # act='mish',
+            num_layers=8,
+            num_heads=6,
             act=config_param["act"],
             mode_multi_dec=True,
-            # multiS_conv=True,
             multiS_conv=config_param["multiS_conv"], )
 
-        if freez:
+        if freeze:
             for n, param in self.model_.named_parameters():
                 if 'net_A' in n or 'conv_out_A' in n:
                     param.requires_grad = False
 
-        # self.lr_scheduler_type = lr_scheduler_type
         self.lr_scheduler_type = config_param["lr"]
         self.weight_decay = config_param["weight_decay"]
 
         self.loss_function = GenLoss()
-        # Moving average loss, loss is the smaller the better
+        # Moving average loss, loss is the smaller, the better
         self.eps_train_loss = 0.01
 
         self.best_average_val_index = -99999999.
@@ -153,10 +126,7 @@ class CascadeUNet(pl.LightningModule):
         self.train_epoch_loss = []
 
         self.max_epochs = 200
-        # self.max_epochs = 150
-        # 10
         self.check_val = 5
-        # 5
         self.warmup_epochs = 2
 
         self.img_height = config.IMAGE_SIZE
@@ -178,11 +148,10 @@ class CascadeUNet(pl.LightningModule):
         input_ = batch['Input'].float()
         target = batch['GT']
 
-        # train
         output = self(input_)
         torch.cuda.empty_cache()
 
-        loss = self.loss_function(output, target, casecade=True, freez=self.freez,
+        loss = self.loss_function(output, target, casecade=True, freez=self.freeze,
                                   delta1=self.config_param['delta1'], delta2=self.config_param['delta2'])
 
         if self.moving_train_loss is None:
@@ -202,7 +171,6 @@ class CascadeUNet(pl.LightningModule):
         if train_mean_loss < self.best_average_train_loss:
             self.best_average_train_loss = train_mean_loss
         self.train_epoch_loss.append(train_mean_loss.detach().cpu().numpy())
-        # self.log("best_average_train_loss", self.best_average_train_loss, logger=False)
         self.logger.log_metrics({"train_mean_loss": train_mean_loss}, self.current_epoch + 1)
         torch.cuda.empty_cache()
 
@@ -213,12 +181,10 @@ class CascadeUNet(pl.LightningModule):
         gt_dose = np.array(target[:, :1, :, :, :].cpu())
         possible_dose_mask = np.array(target[:, 1:, :, :, :].cpu())
 
-        roi_size = (config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE)
-
         prediction = self.forward(input_)
 
         torch.cuda.empty_cache()
-        loss = self.loss_function(prediction[1][0], target, mode='val', casecade=True, freez=self.freez)
+        loss = self.loss_function(prediction[1][0], target, mode='val', casecade=True, freez=self.freeze)
 
         prediction_b = np.array(prediction[1][0].cpu())
 
@@ -261,15 +227,10 @@ class CascadeUNet(pl.LightningModule):
         gt_dose = target[:, :1, :, :, :].cpu()
         possible_dose_mask = target[:, 1:, :, :, :].cpu()
 
-        roi_size = (config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE)
-        # sw_batch_size = 1
         prediction = self.forward(input_)
         prediction = prediction[1][0].cpu()
 
         prediction[np.logical_or(possible_dose_mask < 1, prediction < 0)] = 0
-
-        # for save image
-        # pred_img = torch.permute(prediction[0].cpu(), (1,0,2,3))
 
         prediction = 70. * prediction
 
@@ -280,28 +241,23 @@ class CascadeUNet(pl.LightningModule):
         self.ivs_values = ivs_values
 
         torch.cuda.empty_cache()
-        ckp_re_dir = os.path.join('YourSampleImages/DosePrediction', 'proposed')
-        if False:
-            # if batch_idx<12:
+        save_results = True
+        if save_results:
+            ckp_re_dir = os.path.join('YourSampleImages/DosePrediction', 'proposed')
             plot_DVH(prediction, batch_data, path=os.path.join(ckp_re_dir, 'dvh_{}.png'.format(batch_idx)))
 
-            prediction_b = prediction.cpu()
-
             # Post-processing and evaluation
-            # prediction[torch.logical_or(possible_dose_mask < 1, prediction < 0)] = 0
-            # for save image
             gt_dose[possible_dose_mask < 1] = 0
 
-            pred_img = torch.permute(prediction[0].cpu(), (1, 0, 2, 3))
+            predicted_img = torch.permute(prediction[0].cpu(), (1, 0, 2, 3))
             gt_img = torch.permute(gt_dose[0], (1, 0, 2, 3))
             name_p = batch_data['file_path'][0].split("/")[-2]
 
-            for i in range(len(pred_img)):
-                pred_i = pred_img[i][0].numpy()
+            for i in range(len(predicted_img)):
+                predicted_i = predicted_img[i][0].numpy()
                 gt_i = 70. * gt_img[i][0].numpy()
-                error = np.abs(gt_i - pred_i)
+                error = np.abs(gt_i - predicted_i)
 
-                # plt.figure("check", (12, 6))
                 # Create a figure and axis object using Matplotlib
                 fig, axs = plt.subplots(3, 1, figsize=(4, 10))
                 plt.subplots_adjust(wspace=0, hspace=0)
@@ -312,12 +268,12 @@ class CascadeUNet(pl.LightningModule):
                 axs[0].axis('off')
 
                 # Display the prediction array
-                axs[1].imshow(pred_i, cmap='jet')
+                axs[1].imshow(predicted_i, cmap='jet')
                 # axs[1].set_title('Prediction')
                 axs[1].axis('off')
 
                 # Display the error map using a heatmap
-                heatmap = axs[2].imshow(error, cmap='jet')
+                axs[2].imshow(error, cmap='jet')
                 # axs[2].set_title('Error Map')
                 axs[2].axis('off')
 
@@ -334,10 +290,7 @@ class CascadeUNet(pl.LightningModule):
 
         mean_dose_metric = np.stack([x["dose_dif"] for x in outputs]).mean()
         std_dose_metric = np.stack([x["dose_dif"] for x in outputs]).std()
-        print(np.min(std_dose_metric))
         mean_dvh_metric = np.mean(self.list_DVH_dif)
-        std_dvh_metric = np.std(self.list_DVH_dif)
-        print(np.min(self.list_DVH_dif))
 
         print(mean_dose_metric, mean_dvh_metric)
         print('----------------------Difference DVH for each structures---------------------')
@@ -347,47 +300,40 @@ class CascadeUNet(pl.LightningModule):
 
         self.log("mean_dose_metric", mean_dose_metric)
         self.log("std_dose_metric", std_dose_metric)
-        self.log("mean_dvh_metric", mean_dvh_metric)
-        self.log("std_dvh_metric", std_dvh_metric)
 
         return self.dict_DVH_dif
 
 
-def main(freez=True, start_fold=0, ckpt=None, id_db=None, is_test=False):
+def main(freeze=True, start_fold=0, ckpt=None, is_test=False):
+    net = None
     if is_test:
         test_loader = TestOpenKBPDataModule()
         # Initialise the LightningModule
         config_param = {
             "act": 'mish',
             "multiS_conv": True,
-            # 'lr': 3*1e-4,
             "lr": 0.0006130697604327541,
-            # 'weight_decay': 2*1e-4,
             'weight_decay': 0.00016303111017674179,
             'delta1': 10,
             'delta2': 8,
         }
-        net = CascadeUNet(
+        net = KFoldPYFER(
             config_param,
-            lr_scheduler_type='cosine',
-            eta_min=1e-7,
-            last_epoch=-1,
-            freez=freez
+            freeze=freeze
         )
         trainer = pl.Trainer(accelerator='gpu', devices=1)
         trainer.test(net, ckpt_path=ckpt, datamodule=test_loader)
     else:
-        # Load the MNIST dataset
+        # Load the dataset
         train_transforms, train_set = get_dataset(path=config.MAIN_PATH + config.TRAIN_DIR, state='train', cv=True,
                                                   size=200, cache=True)
         val_transforms, val_set = get_dataset(path=config.MAIN_PATH + config.TRAIN_VAL_DIR, state='val', cv=True,
                                               size=40, cache=True)
         # Define the number of folds for cross-validation
-        # start_fold = 0
         num_fold = 6
         folds = list(range(0, num_fold))
 
-        cvdataset = CrossValidation(
+        cv_dataset = CrossValidation(
             dataset_cls=CVDataset,
             data=train_set + val_set,
             nfolds=num_fold,
@@ -395,19 +341,14 @@ def main(freez=True, start_fold=0, ckpt=None, id_db=None, is_test=False):
             transform=train_transforms,
         )
 
-        # test_ds = get_dataset(path=config.MAIN_PATH + config.VAL_DIR, state='val',
-        #                                 size=100, cache=True)
-        # test_loader = DataLoader(test_ds, batch_size=1, shuffle=False,
-        #                       num_workers=config.NUM_WORKERS, pin_memory=True)
-
         for fold in list(range(start_fold, num_fold)):
             # Get the data loaders for this fold
             print(folds[0:fold] + folds[(fold + 1):], '--------------------------------------------------')
-            # train_ds = cvdataset.get_dataset(folds=folds[0:fold] + folds[(fold+1):])
-            # train_loader = DataLoader(train_ds, batch_size=config.BATCH_SIZE, shuffle=True, 
-            #                         num_workers=config.NUM_WORKERS, collate_fn=list_data_collate, pin_memory=True)
+            train_ds = cv_dataset.get_dataset(folds=folds[0:fold] + folds[(fold + 1):])
+            train_loader = DataLoader(train_ds, batch_size=config.BATCH_SIZE, shuffle=True,
+                                      num_workers=config.NUM_WORKERS, collate_fn=list_data_collate, pin_memory=True)
 
-            val_ds = cvdataset.get_dataset(folds=fold, transform=val_transforms)
+            val_ds = cv_dataset.get_dataset(folds=fold, transform=val_transforms)
             val_loader = DataLoader(val_ds, batch_size=1, shuffle=False,
                                     num_workers=config.NUM_WORKERS, pin_memory=True)
 
@@ -415,75 +356,32 @@ def main(freez=True, start_fold=0, ckpt=None, id_db=None, is_test=False):
             config_param = {
                 "act": 'mish',
                 "multiS_conv": True,
-                # 'lr': 3*1e-4,
                 "lr": 0.0006130697604327541,
-                # 'weight_decay': 2*1e-4,
                 'weight_decay': 0.00016303111017674179,
                 'delta1': 10,
                 'delta2': 8,
             }
-            net = CascadeUNet(
+            net = KFoldPYFER(
                 config_param,
-                lr_scheduler_type='cosine',
-                eta_min=1e-7,
-                last_epoch=-1,
-                freez=freez
+                freeze=freeze
             )
 
-            # # set up checkpoints
-            # checkpoint_callback = ModelCheckpoint(
-            #     dirpath=config.CHECKPOINT_MODEL_DIR_FINAL_KFOLD+"checkpoints_dose/fold-{}".format(fold),
-            #     save_last=True, monitor="mean_dose_score", mode="max",
-            #     every_n_epochs=net.check_val,
-            #     auto_insert_metric_name=True,
-            #     #  filename=net.filename,
-            # )
-
-            # # set up logger
-            # if fold == start_fold and id_db!=None:
-            #     mlflow_logger = MLFlowLogger(
-            #         experiment_name='EXPERIMENT_NAME',
-            #         tracking_uri="databricks",
-            #         run_id = id_db
-            #         )
-            # else:
-            #     mlflow_logger = MLFlowLogger(
-            #         experiment_name='EXPERIMENT_NAME',
-            #         tracking_uri="databricks",
-            #         run_name = 'exp1_k-fold-{}'.format(fold)
-            #         )
-
-            # # initialise Lightning's trainer.
-            # trainer = pl.Trainer(
-            #     # strategy=strategy,
-            #     devices=[0],
-            #     accelerator="gpu",
-            #     max_epochs=net.max_epochs,
-            #     check_val_every_n_epoch=net.check_val,
-            #     callbacks=[checkpoint_callback],
-            #     logger=mlflow_logger,
-            #     # callbacks=RichProgressBar(),
-            #     # callbacks=[bar],
-            #     default_root_dir=config.CHECKPOINT_MODEL_DIR_FINAL_KFOLD,
-            #     # enable_progress_bar=True,
-            #     # log_every_n_steps=net.check_val,
-            # )
             trainer = pl.Trainer(accelerator='gpu', devices=1)
 
             trainer.test(net, ckpt_path=ckpt, dataloaders=val_loader)
 
-            # if fold == start_fold and ckpt!=None:
-            #     # Load the last checkpoint in this fold and resume training for additional epochs
-            #     trainer.fit(net, train_loader, val_loader,
-            #             ckpt_path=ckpt)
-            # else:
-            #     # Train the model for multiple epochs and save the checkpoint after each epoch in this fold
-            #     trainer.fit(net, train_loader, val_loader)
+            if fold == start_fold and ckpt is not None:
+                # Load the last checkpoint in this fold and resume training for additional epochs
+                trainer.fit(net, train_loader, val_loader,
+                            ckpt_path=ckpt)
+            else:
+                # Train the model for multiple epochs and save the checkpoint after each epoch in this fold
+                trainer.fit(net, train_loader, val_loader)
 
-            # release GPU memory
+            # Release GPU memory
             torch.cuda.empty_cache()
 
-            # release system memory
+            # Release system memory
             gc.collect()
             break
 
