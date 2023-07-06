@@ -12,7 +12,6 @@ from pytorch_lightning import Callback
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import MLFlowLogger
 
-from torch.nn.functional import interpolate
 from torch.nn import init
 
 import bitsandbytes as bnb
@@ -97,7 +96,7 @@ class FineTuneCB(Callback):
         trainer.optimizers = optimizers
 
 
-class GANMultiDisc(pl.LightningModule):
+class GAN(pl.LightningModule):
 
     def __init__(
             self,
@@ -260,7 +259,7 @@ def main():
         "num_layers": 4,
         "num_heads": 6,
     }
-    net = GANMultiDisc(
+    net = GAN(
         config_param,
         std_noise=0.1,
     )

@@ -12,6 +12,7 @@ from pytorch_lightning.loggers import MLFlowLogger
 import bitsandbytes as bnb
 
 from DosePrediction.Models.Networks.model_ablation import *
+# from DosePrediction.Models.Networks.models_experiments import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
 from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
@@ -81,41 +82,39 @@ class TestModel(pl.LightningModule):
         # OAR + PTV + CT => dose
 
         # self.model_ = SharedUNetRModelA(
-        # in_channels_a=9,
-        # in_channels_b=9,
-        # out_channels=1,
-        # img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
-        # # 16 => 4
-        # feature_size=16,
-        # hidden_size=768,
-        # mlp_dim=3072,
-        # num_heads=12,
-        # pos_embed="perceptron",
-        # norm_name="instance",
-        # res_block=True,
-        # conv_block=True,
-        # dropout_rate=0.0)
-
+        #     in_channels_a=9,
+        #     in_channels_b=9,
+        #     out_channels=1,
+        #     img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
+        #     feature_size=16,
+        #     hidden_size=768,
+        #     mlp_dim=3072,
+        #     num_heads=12,
+        #     pos_embed="perceptron",
+        #     norm_name="instance",
+        #     res_block=True,
+        #     conv_block=True,
+        #     dropout_rate=0.0)
+        #
         # self.model_ = SharedUNetRModel(
-        # in_channels_a=9,
-        # in_channels_b=25,
-        # out_channels=1,
-        # img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
-        # # 16 => 4
-        # feature_size=16,
-        # hidden_size=768,
-        # mlp_dim=3072,
-        # num_heads=12,
-        # pos_embed="perceptron",
-        # norm_name="instance",
-        # res_block=True,
-        # conv_block=True,
-        # dropout_rate=0.0)
-
+        #     in_channels_a=9,
+        #     in_channels_b=25,
+        #     out_channels=1,
+        #     img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
+        #     feature_size=16,
+        #     hidden_size=768,
+        #     mlp_dim=3072,
+        #     num_heads=12,
+        #     pos_embed="perceptron",
+        #     norm_name="instance",
+        #     res_block=True,
+        #     conv_block=True,
+        #     dropout_rate=0.0)
+        #
         # self.model_ = SharedUNetModel(in_ch=9, out_ch=1,
-        #                         list_ch=[-1, 16, 32, 64, 128, 256, 512],
-        #                         mode_decoder=2,
-        #                         mode_encoder=2)
+        #                               list_ch=[-1, 16, 32, 64, 128, 256, 512],
+        #                               mode_decoder=2,
+        #                               mode_encoder=2)
 
         self.model_ = VitGenerator(
             in_ch=9,
@@ -138,21 +137,18 @@ class TestModel(pl.LightningModule):
         #                                  num_layers=config_param["num_layers"],  # 4, 8, 12
         #                                  num_heads=config_param["num_heads"]  # 3, 6, 12
         #                                  )
-
+        #
         # self.model_ = Model(in_ch=9, out_ch=1,
-        #               list_ch_A=[-1, 16, 32, 64, 128, 256],
-        #               list_ch_B=[-1, 32, 64, 128, 256, 512],
-        #               mode_decoder_A=4,
-        #               mode_decoder_B=4,
-        #               mode_encoder_A=2,
-        #               mode_encoder_B=1)
+        #                     list_ch_A=[-1, 16, 32, 64, 128, 256],
+        #                     list_ch_B=[-1, 32, 64, 128, 256, 512],
+        #                     mode_decoder_A=4,
+        #                     mode_decoder_B=4,
+        #                     mode_encoder_A=2,
+        #                     mode_encoder_B=1)
+        #
         # self.model_ = ModelMonai(in_ch=9, out_ch=1,
-        #                   list_ch_A=(16, 32, 64, 128, 256),
-        #                   list_ch_B=(32, 64, 128, 256, 512),
-        #                   mode_decoder_A=1,
-        #                   mode_decoder_B=1,
-        #                   mode_encoder_A=1,
-        #                   mode_encoder_B=2)
+        #                          list_ch_A=(16, 32, 64, 128, 256),
+        #                          list_ch_B=(32, 64, 128, 256, 512))
 
         self.lr = config_param["lr"]
         self.weight_decay = config_param["weight_decay"]
@@ -356,7 +352,6 @@ class TestModel(pl.LightningModule):
 
 
 def main(act, crop_flag, sw_batch_size, image_size, huber, resume, databricks, ckp):
-
     # Initialise the LightningModule
     openkbp_ds = OpenKBPDataModule(crop_flag=crop_flag, image_size=image_size)
     config_param = {
