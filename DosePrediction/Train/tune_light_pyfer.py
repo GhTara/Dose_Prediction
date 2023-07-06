@@ -12,41 +12,28 @@ from DosePrediction.Train.train_light_pyfer import *
 import DosePrediction.Train.config as config
 
 
-class TuneCascade(tune.Trainable):
-    """Train a Pytorch ConvNet."""
+class TunePyfer(tune.Trainable):
+    """Train a Pytorch Model."""
 
     def setup(self, config_hparam):
         self.config_hparam = config_hparam
         self.data = OpenKBPDataModule()
-        self.model = Pyfer(self.config_hparam,
-                           lr_scheduler_type='cosine',
-                           eta_min=1e-7,
-                           last_epoch=-1
-                           )
+        self.model = Pyfer(self.config_hparam, )
+
         metrics = {"loss": "val_loss"}
-        callbacks = [TuneReportCallback(metrics, on="validation_end"),
-                     # ModelCheckpoint(
-                     #     dirpath=config.CHECKPOINT_MODEL_DIR,
-                     #     save_last=True, monitor="mean_dose_score", mode="max",
-                     #     every_n_epochs=self.model.check_val,
-                     #     auto_insert_metric_name=True,
-                     #     #  filename=net.filename,
-                     # )
-                     ]
+        callbacks = [TuneReportCallback(metrics, on="validation_end"), ]
         callbacks = callbacks or []
-        
+
         # set up logger
         mlflow_logger = MLFlowLogger(
             experiment_name='EXPERIMENT_NAME',
             tracking_uri="databricks",
             # run_id = ''
         )
-    
+
         self.trainer = pl.Trainer(
             max_epochs=config_hparam["num_epochs"],
-            # callbacks=callbacks,
             strategy=RayStrategy(num_workers=config_hparam["num_workers"], use_gpu=config_hparam["use_gpu"]),
-            # progress_bar_refresh_rate=0,
             default_root_dir=config.CHECKPOINT_MODEL_DIR,
             logger=mlflow_logger,
             enable_progress_bar=False,
@@ -58,14 +45,6 @@ class TuneCascade(tune.Trainable):
         self.val_loss = self.trainer.callback_metrics["val_loss"]
         return {"loss": self.val_loss}
 
-    # def save_checkpoint(self, tmp_ckpt_dir):
-    #     path = osp.join(tmp_ckpt_dir, f"{self.runner.config.VARIANT}.{self.runner.count_checkpoints}.pth")
-    #     self.runner.save_checkpoint(path)
-    #     return path
-    #
-    # def load_checkpoint(self, path):
-    #     self.runner.load_checkpoint(path)
-
     def reset_config(self, new_config):
         self.config_hparam = new_config
         self.model.update_config(new_config)
@@ -74,9 +53,6 @@ class TuneCascade(tune.Trainable):
 
 class RayTuner:
     def __init__(self, config_hparam):
-        # self.model = model
-        # self.data = data
-        # self.callbacks = callbacks
         self.config_hparam = config_hparam
         self.num_epochs = config_hparam["num_epochs"]
         self.num_workers = config_hparam["num_workers"]
@@ -84,29 +60,10 @@ class RayTuner:
         self.analysis = None
         ray.init()
 
-    # def train_model(self):
-    #     data = OpenKBPDataModule()
-    #     model = CascadeUNet(self.config_hparam,
-    #                         lr_scheduler_type='cosine',
-    #                         lr=3e-4,
-    #                         weight_decay=1e-4,
-    #                         eta_min=1e-7,
-    #                         last_epoch=-1
-    #                         )
-    #     trainer = pl.Trainer(
-    #         max_epochs=self.num_epochs,
-    #         callbacks=self.callbacks,
-    #         strategy=RayStrategy(num_workers=self.num_workers, use_gpu=self.use_gpu),
-    #         # progress_bar_refresh_rate=0,
-    #         default_root_dir=config.CHECKPOINT_MODEL_DIR,
-    #     )
-    #
-    #     trainer.fit(model, datamodule=data)
-
     def ASHAScheduler(self, n_samples, grace_period=10, reduction_factor=3, search='RS'):
         if search == 'BO':
             searcher = BayesOptSearch(metric="loss", mode="min")
-            self.analysis = tune.run(TuneCascade,
+            self.analysis = tune.run(TunePyfer,
                                      name="ASHA/BO",
                                      verbose=True,
                                      num_samples=n_samples,
@@ -125,9 +82,9 @@ class RayTuner:
                                      reuse_actors=True)
         elif search == 'optuna ':
             searcher = OptunaSearch(
-                        metric="loss",
-                        mode="min")
-            self.analysis = tune.run(TuneCascade,
+                metric="loss",
+                mode="min")
+            self.analysis = tune.run(TunePyfer,
                                      name="ASHA/BO2",
                                      verbose=True,
                                      num_samples=n_samples,
@@ -143,9 +100,9 @@ class RayTuner:
                                          reduction_factor=reduction_factor,
                                          brackets=1),
                                      config=self.config_hparam,
-                                     reuse_actors=True)                                     
+                                     reuse_actors=True)
         else:
-            self.analysis = tune.run(TuneCascade,
+            self.analysis = tune.run(TunePyfer,
                                      name="ASHA/RS",
                                      verbose=True,
                                      num_samples=n_samples,
@@ -170,10 +127,10 @@ class RayTuner:
                   mode='min',
                   perturbation_interval=20.0,
                   hyperparam_bounds=self.config_hparam)
-        self.analysis = tune.run(TuneCascade,
+        self.analysis = tune.run(TunePyfer,
                                  name="PB2",
                                  resources_per_trial=get_tune_resources(
-                                         num_workers=self.num_workers, use_gpu=self.use_gpu),
+                                     num_workers=self.num_workers, use_gpu=self.use_gpu),
                                  scheduler=pbt,
                                  metric="loss",
                                  mode="min",
@@ -198,17 +155,8 @@ def main(num_samples=10,
          num_workers=1,
          use_gpu=True,
          mode_eval=1):
-             
-    # # for vit
-    # config_hparam = {
-    #     "num_layers": tune.choice([4, 8, 12]),
-    #     "num_heads": tune.choice([3, 6, 12]),
-    #     "num_epochs": num_epochs,
-    #     "num_workers": num_workers,
-    #     "use_gpu": use_gpu,
-    # }
-    
-    # for final model
+
+    # For final model
     config_hparam = {
         "act": tune.choice(['mish', 'relu']),
         "multiS_conv": tune.choice([True, False]),
@@ -219,9 +167,9 @@ def main(num_samples=10,
         "use_gpu": use_gpu,
     }
 
-    raytuners = RayTuner(config_hparam)
-    analysis = raytuners.ASHAScheduler(n_samples=num_samples, grace_period=1, reduction_factor=2, search='optuna')
-    raytuners.get_best_param()
+    ray_tuners = RayTuner(config_hparam)
+    analysis = ray_tuners.ASHAScheduler(n_samples=num_samples, grace_period=1, reduction_factor=2, search='optuna')
+    ray_tuners.get_best_param()
 
 
 if __name__ == "__main__":

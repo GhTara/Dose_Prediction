@@ -1,7 +1,6 @@
-import sys
+import DosePrediction.Train.config as dose_config
 import gc
-
-sys.path.insert(0, 'HOME_DIRECTORY')
+from typing import Optional
 
 from monai.inferers import sliding_window_inference
 from monai.data import DataLoader, list_data_collate, decollate_batch
@@ -10,12 +9,9 @@ from monai.metrics import HausdorffDistanceMetric
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import MLFlowLogger
-# from ray_lightning import RayShardedStrategy
 
 from DosePrediction.Models.Networks.dose_pyfer import *
-# from RTDosePrediction.DosePrediction.Train.model import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_linked_monai import get_dataset
-import DosePrediction.Train.config as dose_config
 from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
 
@@ -32,6 +28,8 @@ torch.backends.cudnn.benchmark = True
 class OpenKBPDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
+        self.val_data = None
+        self.train_data = None
 
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
@@ -56,7 +54,6 @@ class TestOpenKBPDataModule(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         # Assign val datasets for use in dataloaders
-
         self.test_data = get_dataset(path=dose_config.MAIN_PATH + dose_config.VAL_DIR, state='test',
                                      size=100, cache=True)
 
@@ -71,16 +68,11 @@ class LinkedNet(pl.LightningModule):
             ckpt_file_path_dose,
             ckpt_file_path_seg,
             config_param,
-            # Adam hp
-            lr: float = 3e-4,
-            weight_decay: float = 1e-4,
-            b1: float = 0.5,
-            b2: float = 0.999,
-            freez=True,
+            freeze=True,
     ):
         super().__init__()
         self.config_param = config_param
-        self.freez = freez
+        self.freeze = freeze
         self.save_hyperparameters()
 
         # OAR + PTV + CT => dose
@@ -119,10 +111,7 @@ class LinkedNet(pl.LightningModule):
         self.train_epoch_loss = []
 
         self.max_epochs = 1300
-        # self.max_epochs = 150
-        # 10
         self.check_val = 3
-        # 5
         self.warmup_epochs = 1
 
         self.sw_batch_size = config_seg.SW_BATCH_SIZE
@@ -173,8 +162,6 @@ class LinkedNet(pl.LightningModule):
         # ------------- to calculate metrics related to dose distribution predictor --------------
         ct = torch.permute(ct, (0, 1, 4, 3, 2))
 
-        roi_size = (config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE)
-        # sw_batch_size = 1
         oars = torch.unsqueeze(oars, dim=0)[:, 1:, :, :, :]
 
         structures = torch.cat((ptv, oars, ct), dim=1)
@@ -190,31 +177,24 @@ class LinkedNet(pl.LightningModule):
 
         torch.cuda.empty_cache()
 
-        ckp_re_dir = os.path.join('YourSampleImages/DosePrediction', 'linked')
-        if batch_idx < 100:
+        save_results = True
+        if save_results and batch_idx < 100:
+            ckp_re_dir = os.path.join('YourSampleImages/DosePrediction', 'linked')
+
             plot_DVH(prediction, batch_data, path=os.path.join(ckp_re_dir, 'dvh_{}.png'.format(batch_idx)))
-            torch.cuda.empty_cache()
-            del batch_data
-            del prediction
-            gc.collect()
-        if False:
-            prediction_b = prediction.cpu()
 
             # Post-processing and evaluation
-            # prediction[torch.logical_or(possible_dose_mask < 1, prediction < 0)] = 0
-            # for save image
             gt_dose[possible_dose_mask < 1] = 0
 
-            pred_img = torch.permute(prediction[0].cpu(), (1, 0, 2, 3))
+            predicted_img = torch.permute(prediction[0].cpu(), (1, 0, 2, 3))
             gt_img = torch.permute(gt_dose[0].cpu(), (1, 0, 2, 3))
             name_p = batch_data['file_path'][0].split("/")[-2]
 
-            for i in range(len(pred_img)):
-                pred_i = pred_img[i][0].numpy()
+            for i in range(len(predicted_img)):
+                predicted_i = predicted_img[i][0].numpy()
                 gt_i = 70. * gt_img[i][0].numpy()
-                error = np.abs(gt_i - pred_i)
+                error = np.abs(gt_i - predicted_i)
 
-                # plt.figure("check", (12, 6))
                 # Create a figure and axis object using Matplotlib
                 fig, axs = plt.subplots(3, 1, figsize=(4, 10))
                 plt.subplots_adjust(wspace=0, hspace=0)
@@ -225,12 +205,12 @@ class LinkedNet(pl.LightningModule):
                 axs[0].axis('off')
 
                 # Display the prediction array
-                axs[1].imshow(pred_i, cmap='jet')
+                axs[1].imshow(predicted_i, cmap='jet')
                 # axs[1].set_title('Prediction')
                 axs[1].axis('off')
 
                 # Display the error map using a heatmap
-                heatmap = axs[2].imshow(error, cmap='jet')
+                axs[2].imshow(error, cmap='jet')
                 # axs[2].set_title('Error Map')
                 axs[2].axis('off')
 
@@ -239,6 +219,11 @@ class LinkedNet(pl.LightningModule):
                     os.mkdir(save_dir)
 
                 fig.savefig(os.path.join(save_dir, '{}.jpg'.format(i)), bbox_inches="tight")
+
+                torch.cuda.empty_cache()
+                del batch_data
+                del prediction
+                gc.collect()
 
         return {"dose_dif": dose_dif}
 
@@ -256,13 +241,12 @@ class LinkedNet(pl.LightningModule):
         print(self.dict_DVH_dif)
 
         self.log("mean_dose_metric", mean_dose_metric)
-        self.log("mean_dvh_metric", mean_dvh_metric)
         return self.dict_DVH_dif
 
 
-def main(ckpt_file_path_dose, ckpt_file_path_seg, freez=True):
-    # initialise the LightningModule
-    openkbp = OpenKBPDataModule()
+def main(ckpt_file_path_dose, ckpt_file_path_seg, freeze=True):
+    # Initialise the LightningModule
+    openkbp_ds = OpenKBPDataModule()
     config_param = {
         "act": 'mish',
         "multiS_conv": True,
@@ -275,22 +259,18 @@ def main(ckpt_file_path_dose, ckpt_file_path_seg, freez=True):
         config_param,
         ckpt_file_path_dose,
         ckpt_file_path_seg,
-        lr_scheduler_type='cosine',
-        eta_min=1e-7,
-        last_epoch=-1,
-        freez=freez
+        freeze=freeze
     )
 
-    # set up checkpoints
+    # Set up checkpoints
     checkpoint_callback = ModelCheckpoint(
         dirpath=config.CHECKPOINT_MODEL_DIR_FINAL_LINKED,
         save_last=True, monitor="mean_dose_score", mode="max",
         every_n_epochs=net.check_val,
         auto_insert_metric_name=True,
-        #  filename=net.filename,
     )
 
-    # set up logger
+    # Set up logger
     mlflow_logger = MLFlowLogger(
         experiment_name='EXPERIMENT_NAME',
         tracking_uri="databricks",
@@ -298,9 +278,7 @@ def main(ckpt_file_path_dose, ckpt_file_path_seg, freez=True):
         # run_id = 'RUN_ID'
     )
 
-    # {'act': 'mish', 'multiS_conv': True, 'lr': 0.0002840195762381102, 'weight_decay': 0.00021139244378558662
-
-    # initialise Lightning's trainer.
+    # Initialise Lightning's trainer.
     trainer = pl.Trainer(
         # strategy=strategy,
         devices=[0],
@@ -309,18 +287,16 @@ def main(ckpt_file_path_dose, ckpt_file_path_seg, freez=True):
         check_val_every_n_epoch=net.check_val,
         callbacks=[checkpoint_callback],
         logger=mlflow_logger,
-        # callbacks=RichProgressBar(),
-        # callbacks=[bar],
         default_root_dir=config.CHECKPOINT_MODEL_DIR_FINAL_LINKED,
         # enable_progress_bar=True,
         # log_every_n_steps=net.check_val,
     )
 
-    # train
+    # Train
     # trainer.fit(net,
-    # datamodule=openkbp,
+    # datamodule=openkbp_ds,
     # ckpt_path=os.path.join(config.CHECKPOINT_MODEL_DIR_FINAL_LINKED, 'last.ckpt'))
-    trainer.fit(net, datamodule=openkbp)
+    trainer.fit(net, datamodule=openkbp_ds)
 
     return net
 

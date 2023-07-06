@@ -1,6 +1,8 @@
-import sys
+from typing import Optional
 
-sys.path.insert(0, 'HOME_DIRECTORY')
+from monai.networks.nets import resnet10
+
+import DosePrediction.Train.config as config
 
 from monai.inferers import sliding_window_inference
 from monai.data import DataLoader, list_data_collate
@@ -17,8 +19,8 @@ import bitsandbytes as bnb
 
 from DosePrediction.Models.Networks.dose_pyfer import *
 from DosePrediction.DataLoader.dataloader_OpenKBP_monai import get_dataset
-import DosePrediction.Train.config as config
 from DosePrediction.Evaluate.evaluate_openKBP import *
+from DosePrediction.Models.Networks.models_experiments import create_pretrained_medical_resnet
 from DosePrediction.Train.loss import GenLoss
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -31,13 +33,12 @@ def init_weights(net, init_type='normal', init_gain=0.02):
         net (network)   -- network to be initialized
         init_type (str) -- the name of an initialization method: normal | xavier | kaiming | orthogonal
         init_gain (float)    -- scaling factor for normal, xavier and orthogonal.
-    We use 'normal' in the original pix2pix and CycleGAN paper. But xavier and kaiming might
-    work better for some applications. Feel free to try yourself.
+    We use 'normal' in the original pix2pix and CycleGAN paper.
     """
 
     def init_func(m):  # define the initialization function
-        classname = m.__class__.__name__
-        if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
+        class_name = m.__class__.__name__
+        if hasattr(m, 'weight') and (class_name.find('Conv') != -1 or class_name.find('Linear') != -1):
             if init_type == 'normal':
                 init.normal_(m.weight.data, 0.0, init_gain)
             elif init_type == 'xavier':
@@ -50,7 +51,7 @@ def init_weights(net, init_type='normal', init_gain=0.02):
                 raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
             if hasattr(m, 'bias') and m.bias is not None:
                 init.constant_(m.bias.data, 0.0)
-        elif classname.find(
+        elif class_name.find(
                 'BatchNorm3d') != -1:  # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
             init.normal_(m.weight.data, 1.0, init_gain)
             init.constant_(m.bias.data, 0.0)
@@ -59,18 +60,11 @@ def init_weights(net, init_type='normal', init_gain=0.02):
     net.apply(init_func)  # apply the initialization function  < init_func>
 
 
-def seed_everything(seed=33):
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.benchmark = True
-    # torch.backends.cudnn.deterministic = True
-
-
 class OpenKBPDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
+        self.val_data = None
+        self.train_data = None
 
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
@@ -108,14 +102,10 @@ class GANMultiDisc(pl.LightningModule):
     def __init__(
             self,
             config_param,
-            feature_size,
             delta3=2,
             # Adam hp
             G_lr: float = 10e-5,
             D_lr: float = 5 * 10e-4,
-            weight_decay: float = 1e-4,
-            b1: float = 0.5,
-            b2: float = 0.999,
             init_type='kaiming',
             init_gain=0.02,
             std_noise=0.1,
@@ -131,28 +121,18 @@ class GANMultiDisc(pl.LightningModule):
         self.std_noise = std_noise
 
         self.save_hyperparameters()
-        # seed_everything()
 
         self.generator = MainSubsetModel(
             in_ch=9,
             out_ch=1,
-            mode_decoder=1,
-            mode_encoder=1,
             feature_size=16,
             img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
-            num_layers=8,  # 4, 8, 12
-            num_heads=6,  # 3, 6, 12,
+            num_layers=8,
+            num_heads=6,
             mode_multi_dec=True,
             act='mish',
             multiS_conv=False
         )
-
-        # self.discriminator = resnet10(
-        # pretrained=False,
-        # spatial_dims=3,
-        # n_input_channels=1,
-        # num_classes=2,
-        # )
 
         self.discriminator, self.pretrained_params = create_pretrained_medical_resnet(
             'PretrainedModels/resnet_10_23dataset.pth', model_constructor=resnet10,
@@ -161,7 +141,6 @@ class GANMultiDisc(pl.LightningModule):
         self.pretrained_params = set(self.pretrained_params)
         for n, param in self.discriminator.named_parameters():
             param.requires_grad = bool(n not in self.pretrained_params)
-            # param.requires_grad = True
 
         if init_w:
             init_weights(self.generator, init_type=self.init_type)
@@ -189,16 +168,6 @@ class GANMultiDisc(pl.LightningModule):
     def forward(self, x):
         return self.generator(x)
 
-    def generate_multi_scale(self, vol):
-        volumes = [vol]
-        ch = vol.shape[-1]
-        # 4 is depth
-        for i in range(1, 4):
-            dim = config.IMAGE_SIZE // np.power(2, i)
-            volume_int = interpolate(vol, size=(dim, dim, dim), mode='trilinear', align_corners=True)
-            volumes.append(volume_int)
-        return volumes
-
     def training_step(self, batch, batch_idx, optimizer_idx):
         torch.cuda.empty_cache()
         conditioned_image = batch['Input'].float()
@@ -207,13 +176,13 @@ class GANMultiDisc(pl.LightningModule):
         # Train generator
         if optimizer_idx == 0:
             fake_image = self(conditioned_image)
-            fake_disc_logits = self.discriminator(fake_image[0])
-            real_disc_logits = self.discriminator(real_image[:, 0:1, :, :, :])
+            fake_disc_logit = self.discriminator(fake_image[0])
+            real_disc_logit = self.discriminator(real_image[:, 0:1, :, :, :])
 
             torch.cuda.empty_cache()
 
             # Adversarial loss is binary cross-entropy
-            adversarial_loss = self.adversarial_criterion(fake_disc_logits, torch.ones_like(fake_disc_logits))
+            adversarial_loss = self.adversarial_criterion(fake_disc_logit, torch.ones_like(fake_disc_logit))
             # Voxel-wise loss
             dose_loss = self.recon_criterion(fake_image, real_image)
             # Total loss
@@ -223,12 +192,13 @@ class GANMultiDisc(pl.LightningModule):
 
         # Train discriminator
         if optimizer_idx == 1:
-            real_disc_logits = self.discriminator(real_image[:, 0:1, :, :, :])
+            real_disc_logit = self.discriminator(real_image[:, 0:1, :, :, :])
             fake_image = self(conditioned_image)
-            fake_disc_logits = self.discriminator(fake_image[0])
+            fake_disc_logit = self.discriminator(fake_image[0])
             torch.cuda.empty_cache()
 
-            d_loss = 0.5 * (self.adversarial_criterion(real_disc_logits, torch.ones_like(real_disc_logits)) + self.adversarial_criterion(fake_disc_logits, torch.zeros_like(fake_disc_logits)))
+            d_loss = 0.5 * (self.adversarial_criterion(real_disc_logit, torch.ones_like(real_disc_logit)) +
+                            self.adversarial_criterion(fake_disc_logit, torch.zeros_like(fake_disc_logit)))
 
             return {"loss": d_loss, "optimizer_idx": optimizer_idx}
 
@@ -256,7 +226,7 @@ class GANMultiDisc(pl.LightningModule):
         torch.cuda.empty_cache()
         dose_loss = self.recon_criterion(prediction, target, mode='val')
 
-        # for vit generator
+        # For generator
         prediction_b = np.array(prediction.cpu())
 
         # Post-processing and evaluation
@@ -279,35 +249,31 @@ class GANMultiDisc(pl.LightningModule):
 
     def configure_optimizers(self):
         opt_g = bnb.optim.Adam8bit(self.generator.parameters(), lr=self.G_lr)
-        # bnb.optim.Adam8bit
         opt_d = bnb.optim.Adam8bit(self.discriminator.parameters(), lr=self.D_lr)
         return [opt_g, opt_d]
 
 
 def main():
-    # initialise the LightningModule
-    openkbp = OpenKBPDataModule()
+    # Initialise the LightningModule
+    openkbp_ds = OpenKBPDataModule()
     config_param = {
         "num_layers": 4,
         "num_heads": 6,
-        # "lr": tune.loguniform(1e-4, 1e-1),
     }
     net = GANMultiDisc(
         config_param,
-        feature_size=16,
         std_noise=0.1,
     )
 
-    # set up checkpoints
+    # Set up checkpoints
     checkpoint_callback = ModelCheckpoint(
         dirpath=config.CHECKPOINT_MODEL_DIR_DOSE_GAN,
         save_last=True, monitor="mean_dose_score", mode="max",
         every_n_epochs=net.check_val,
         auto_insert_metric_name=True,
-        #  filename=net.filename,
     )
 
-    # set up logger
+    # Set up logger
     mlflow_logger = MLFlowLogger(
         experiment_name='EXPERIMENT_NAME',
         tracking_uri="databricks",
@@ -317,28 +283,24 @@ def main():
 
     fine = FineTuneCB(unfreeze_epoch=10)
 
-    # initialise Lightning's trainer.
+    # Initialise Lightning's trainer.
     trainer = pl.Trainer(
-        # strategy=strategy,
         devices=[0],
         accelerator="gpu",
         max_epochs=net.max_epochs,
         check_val_every_n_epoch=net.check_val,
         callbacks=[checkpoint_callback, fine],
         logger=mlflow_logger,
-        # callbacks=RichProgressBar(),
-        # callbacks=[bar],
         default_root_dir=config.CHECKPOINT_MODEL_DIR_DOSE_GAN,
         # enable_progress_bar=True,
         # log_every_n_steps=net.check_val,
-        # auto_lr_find=True,
     )
 
-    # train
+    # Train
     # trainer.fit(net,
-    # datamodule=openkbp,
+    # datamodule=openkbp_ds,
     # ckpt_path=os.path.join(config.CHECKPOINT_MODEL_DIR_DOSE_GAN, 'last.ckpt'))
-    trainer.fit(net, datamodule=openkbp)
+    trainer.fit(net, datamodule=openkbp_ds)
 
     return net
 
