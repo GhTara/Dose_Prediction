@@ -15,7 +15,7 @@ from NetworkTrainer.network_trainer import *
 
 
 ##############################
-#        Generator
+#        Elements
 ##############################
 
 class SingleConv(nn.Module):
@@ -46,6 +46,74 @@ class UpConv(nn.Module):
         x = F.interpolate(x, scale_factor=2, mode='trilinear', align_corners=True)
         x = self.conv(x)
         return x
+
+
+class MultiAttGate(nn.Module):
+    def __init__(self, in_ch):
+        super(MultiAttGate, self).__init__()
+
+        self.initial_conv = nn.Conv3d(in_ch, in_ch,
+                                      kernel_size=1, stride=1, padding='same')
+        self.intermediate = nn.Sequential(
+            nn.ReLU(inplace=True),
+            conv_3_1(ch_in=in_ch, ch_out=in_ch),
+            nn.BatchNorm3d(in_ch),
+            nn.Sigmoid()
+        )
+
+    def forward(self, down_inp, sample_inp):
+        # z1
+        down_inp = self.initial_conv(down_inp)
+        # z2
+        sample_inp = self.initial_conv(sample_inp)
+        # z12
+        inp = torch.add(down_inp, sample_inp)
+        # x12
+        inp = self.intermediate(inp)
+        out = torch.mul(down_inp, inp)
+        return out
+
+
+class AttGate(nn.Module):
+    def __init__(self, in_ch):
+        super(AttGate, self).__init__()
+
+        self.initial_conv = nn.Conv3d(in_ch, in_ch,
+                                      kernel_size=1, stride=1, padding='same')
+        self.intermediate = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.Conv3d(in_ch, in_ch, 1, stride=1, padding='same'),
+            nn.BatchNorm3d(in_ch),
+            nn.Sigmoid()
+        )
+
+    def forward(self, down_inp, sample_inp):
+        # z1
+        down_inp = self.initial_conv(down_inp)
+        # z2
+        sample_inp = self.initial_conv(sample_inp)
+        # z12
+        inp = torch.add(down_inp, sample_inp)
+        # x12
+        inp = self.intermediate(inp)
+        out = torch.mul(down_inp, inp)
+        return out
+
+
+class MultiSingleConv(nn.Module):
+
+    def __init__(
+            self,
+            in_channels: int,
+            out_channels: int,
+    ):
+        super(MultiSingleConv, self).__init__()
+
+        self.cov_ = conv_3_1(ch_in=in_channels, ch_out=out_channels)
+
+    def forward(self, inp):
+        out = self.cov_(inp)
+        return out
 
 
 ##############################
@@ -251,6 +319,75 @@ class InitialEncoderA(nn.Module):
         return conv_x, down_x
 
 
+class Encoder(nn.Module):
+    def __init__(self, in_ch, list_ch):
+        super(Encoder, self).__init__()
+        self.encoder_1 = nn.Sequential(
+            SingleConv(in_ch, list_ch[1], kernel_size=3, stride=1, padding=1),
+            SingleConv(list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
+        )
+        self.encoder_2 = nn.Sequential(
+            SingleConv(list_ch[1], list_ch[2], kernel_size=3, stride=2, padding=1),
+            SingleConv(list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
+        )
+        self.encoder_3 = nn.Sequential(
+            SingleConv(list_ch[2], list_ch[3], kernel_size=3, stride=2, padding=1),
+            SingleConv(list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
+        )
+        self.encoder_4 = nn.Sequential(
+            SingleConv(list_ch[3], list_ch[4], kernel_size=3, stride=2, padding=1),
+            SingleConv(list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
+        )
+        self.encoder_5 = nn.Sequential(
+            SingleConv(list_ch[4], list_ch[5], kernel_size=3, stride=2, padding=1),
+            SingleConv(list_ch[5], list_ch[5], kernel_size=3, stride=1, padding=1)
+        )
+
+    def forward(self, x):
+        out_encoder_1 = self.encoder_1(x)
+        out_encoder_2 = self.encoder_2(out_encoder_1)
+        out_encoder_3 = self.encoder_3(out_encoder_2)
+        out_encoder_4 = self.encoder_4(out_encoder_3)
+        out_encoder_5 = self.encoder_5(out_encoder_4)
+
+        return [out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5]
+
+
+class DilatedEncoder(nn.Module):
+    def __init__(self, in_ch, list_ch):
+        super(DilatedEncoder, self).__init__()
+        self.encoder_1 = DualDilatedBlock(ch_in=in_ch, ch_out=list_ch[1])
+
+        self.encoder_2 = nn.Sequential(
+            nn.MaxPool3d(kernel_size=2),
+            DualDilatedBlock(ch_in=list_ch[1], ch_out=list_ch[2])
+        )
+
+        self.encoder_3 = nn.Sequential(
+            nn.MaxPool3d(kernel_size=2),
+            DualDilatedBlock(ch_in=list_ch[2], ch_out=list_ch[3])
+        )
+
+        self.encoder_4 = nn.Sequential(
+            nn.MaxPool3d(kernel_size=2),
+            DualDilatedBlock(ch_in=list_ch[3], ch_out=list_ch[4])
+        )
+
+        self.encoder_5 = nn.Sequential(
+            nn.MaxPool3d(kernel_size=2),
+            DualDilatedBlock(ch_in=list_ch[4], ch_out=list_ch[5])
+        )
+
+    def forward(self, x):
+        out_encoder_1 = self.encoder_1(x)
+        out_encoder_2 = self.encoder_2(out_encoder_1)
+        out_encoder_3 = self.encoder_3(out_encoder_2)
+        out_encoder_4 = self.encoder_4(out_encoder_3)
+        out_encoder_5 = self.encoder_5(out_encoder_4)
+
+        return [out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5]
+
+
 ##############################
 #        Decoder
 ##############################
@@ -408,6 +545,224 @@ class DilatedSharedDecoder(nn.Module):
         return out_decoder_1
 
 
+class Decoder(nn.Module):
+    def __init__(self, list_ch):
+        super(Decoder, self).__init__()
+
+        self.up_conv_4 = UpConv(list_ch[5], list_ch[4])
+        self.decoder_conv_4 = nn.Sequential(
+            SingleConv(2 * list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1),
+            SingleConv(list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
+        )
+        self.up_conv_3 = UpConv(list_ch[4], list_ch[3])
+        self.decoder_conv_3 = nn.Sequential(
+            SingleConv(2 * list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1),
+            SingleConv(list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
+        )
+        self.up_conv_2 = UpConv(list_ch[3], list_ch[2])
+        self.decoder_conv_2 = nn.Sequential(
+            SingleConv(2 * list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1),
+            SingleConv(list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
+        )
+        self.up_conv_1 = UpConv(list_ch[2], list_ch[1])
+        self.decoder_conv_1 = nn.Sequential(
+            SingleConv(2 * list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
+        )
+
+    def forward(self, out_encoder):
+        out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5 = out_encoder
+
+        out_decoder_4 = self.decoder_conv_4(
+            torch.cat((self.up_conv_4(out_encoder_5), out_encoder_4), dim=1)
+        )
+        out_decoder_3 = self.decoder_conv_3(
+            torch.cat((self.up_conv_3(out_decoder_4), out_encoder_3), dim=1)
+        )
+        out_decoder_2 = self.decoder_conv_2(
+            torch.cat((self.up_conv_2(out_decoder_3), out_encoder_2), dim=1)
+        )
+        out_decoder_1 = self.decoder_conv_1(
+            torch.cat((self.up_conv_1(out_decoder_2), out_encoder_1), dim=1)
+        )
+
+        return out_decoder_1
+
+
+class AttDecoder(nn.Module):
+    def __init__(self, list_ch):
+        super(AttDecoder, self).__init__()
+
+        self.up_conv_4 = UpConv(list_ch[5], list_ch[4])
+        self.att_gate4 = AttGate(list_ch[4])
+        self.decoder_conv_4 = nn.Sequential(
+            # MultiSingleConv(2 * list_ch[4], list_ch[4]),
+            # MultiSingleConv(list_ch[4], list_ch[4])
+            SingleConv(2 * list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1),
+            SingleConv(list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
+        )
+        self.up_conv_3 = UpConv(list_ch[4], list_ch[3])
+        self.att_gate3 = AttGate(list_ch[3])
+        self.decoder_conv_3 = nn.Sequential(
+            # MultiSingleConv(2 * list_ch[3], list_ch[3]),
+            # MultiSingleConv(list_ch[3], list_ch[3])
+            SingleConv(2 * list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1),
+            SingleConv(list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
+        )
+        self.up_conv_2 = UpConv(list_ch[3], list_ch[2])
+        self.att_gate2 = AttGate(list_ch[2])
+        self.decoder_conv_2 = nn.Sequential(
+            # MultiSingleConv(2 * list_ch[2], list_ch[2]),
+            # MultiSingleConv(list_ch[2], list_ch[2])
+            SingleConv(2 * list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1),
+            SingleConv(list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
+        )
+        self.up_conv_1 = UpConv(list_ch[2], list_ch[1])
+        self.att_gate1 = AttGate(list_ch[1])
+        self.decoder_conv_1 = nn.Sequential(
+            SingleConv(2 * list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
+        )
+
+    def forward(self, out_encoder):
+        out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5 = out_encoder
+
+        in_up4 = self.up_conv_4(out_encoder_5)
+        in_att4 = self.att_gate4(down_inp=out_encoder_4, sample_inp=in_up4)
+        out_decoder_4 = self.decoder_conv_4(
+            torch.cat((in_up4, in_att4), dim=1)
+        )
+        in_up3 = self.up_conv_3(out_decoder_4)
+        in_att3 = self.att_gate3(down_inp=out_encoder_3, sample_inp=in_up3)
+        out_decoder_3 = self.decoder_conv_3(
+            torch.cat((in_up3, in_att3), dim=1)
+        )
+        in_up2 = self.up_conv_2(out_decoder_3)
+        in_att2 = self.att_gate2(down_inp=out_encoder_2, sample_inp=in_up2)
+        out_decoder_2 = self.decoder_conv_2(
+            torch.cat((in_up2, in_att2), dim=1)
+        )
+        in_up1 = self.up_conv_1(out_decoder_2)
+        in_att1 = self.att_gate1(down_inp=out_encoder_1, sample_inp=in_up1)
+        out_decoder_1 = self.decoder_conv_1(
+            torch.cat((in_up1, in_att1), dim=1)
+        )
+
+        return out_decoder_1
+
+
+class PureAttDecoder(nn.Module):
+    def __init__(self, list_ch):
+        super(PureAttDecoder, self).__init__()
+
+        self.up_conv_4 = UpConv(list_ch[5], list_ch[4])
+        self.att_gate4 = AttGate(list_ch[4])
+        self.decoder_conv_4 = SingleConv(2 * list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
+
+        self.up_conv_3 = UpConv(list_ch[4], list_ch[3])
+        self.att_gate3 = AttGate(list_ch[3])
+        self.decoder_conv_3 = SingleConv(2 * list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
+
+        self.up_conv_2 = UpConv(list_ch[3], list_ch[2])
+        self.att_gate2 = AttGate(list_ch[2])
+        self.decoder_conv_2 = SingleConv(2 * list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
+
+        self.up_conv_1 = UpConv(list_ch[2], list_ch[1])
+        self.att_gate1 = AttGate(list_ch[1])
+        self.decoder_conv_1 = SingleConv(2 * list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
+
+    def forward(self, out_encoder):
+        out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5 = out_encoder
+
+        in_up4 = self.up_conv_4(out_encoder_5)
+        in_att4 = self.att_gate4(down_inp=out_encoder_4, sample_inp=in_up4)
+        out_decoder_4 = self.decoder_conv_4(
+            torch.cat((in_up4, in_att4), dim=1)
+        )
+
+        in_up3 = self.up_conv_3(out_decoder_4)
+        in_att3 = self.att_gate3(down_inp=out_encoder_3, sample_inp=in_up3)
+        out_decoder_3 = self.decoder_conv_3(
+            torch.cat((in_up3, in_att3), dim=1)
+        )
+
+        in_up2 = self.up_conv_2(out_decoder_3)
+        in_att2 = self.att_gate2(down_inp=out_encoder_2, sample_inp=in_up2)
+        out_decoder_2 = self.decoder_conv_2(
+            torch.cat((in_up2, in_att2), dim=1)
+        )
+
+        in_up1 = self.up_conv_1(out_decoder_2)
+        in_att1 = self.att_gate1(down_inp=out_encoder_1, sample_inp=in_up1)
+        out_decoder_1 = self.decoder_conv_1(
+            torch.cat((in_up1, in_att1), dim=1)
+        )
+
+        return out_decoder_1
+
+
+class PureMultiAttDecoder(nn.Module):
+    def __init__(self, list_ch):
+        super(PureMultiAttDecoder, self).__init__()
+
+        self.up_conv_4 = UpConv(list_ch[5], list_ch[4])
+        self.att_gate4 = MultiAttGate(list_ch[4])
+        self.decoder_conv_4 = nn.Sequential(
+            # MultiSingleConv(2 * list_ch[4], list_ch[4]),
+            # MultiSingleConv(list_ch[4], list_ch[4])
+            SingleConv(2 * list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1),
+            # SingleConv(list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
+        )
+        self.up_conv_3 = UpConv(list_ch[4], list_ch[3])
+        self.att_gate3 = MultiAttGate(list_ch[3])
+        self.decoder_conv_3 = nn.Sequential(
+            # MultiSingleConv(2 * list_ch[3], list_ch[3]),
+            # MultiSingleConv(list_ch[3], list_ch[3])
+            SingleConv(2 * list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1),
+            # SingleConv(list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
+        )
+        self.up_conv_2 = UpConv(list_ch[3], list_ch[2])
+        self.att_gate2 = MultiAttGate(list_ch[2])
+        self.decoder_conv_2 = nn.Sequential(
+            # MultiSingleConv(2 * list_ch[2], list_ch[2]),
+            # MultiSingleConv(list_ch[2], list_ch[2])
+            SingleConv(2 * list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1),
+            # SingleConv(list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
+        )
+        self.up_conv_1 = UpConv(list_ch[2], list_ch[1])
+        self.att_gate1 = MultiAttGate(list_ch[1])
+        self.decoder_conv_1 = nn.Sequential(
+            SingleConv(2 * list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
+        )
+
+    def forward(self, out_encoder):
+        out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5 = out_encoder
+
+        in_up4 = self.up_conv_4(out_encoder_5)
+        in_att4 = self.att_gate4(down_inp=out_encoder_4, sample_inp=in_up4)
+        out_decoder_4 = self.decoder_conv_4(
+            torch.cat((in_up4, in_att4), dim=1)
+        )
+
+        in_up3 = self.up_conv_3(out_decoder_4)
+        in_att3 = self.att_gate3(down_inp=out_encoder_3, sample_inp=in_up3)
+        out_decoder_3 = self.decoder_conv_3(
+            torch.cat((in_up3, in_att3), dim=1)
+        )
+
+        in_up2 = self.up_conv_2(out_decoder_3)
+        in_att2 = self.att_gate2(down_inp=out_encoder_2, sample_inp=in_up2)
+        out_decoder_2 = self.decoder_conv_2(
+            torch.cat((in_up2, in_att2), dim=1)
+        )
+
+        in_up1 = self.up_conv_1(out_decoder_2)
+        in_att1 = self.att_gate1(down_inp=out_encoder_1, sample_inp=in_up1)
+        out_decoder_1 = self.decoder_conv_1(
+            torch.cat((in_up1, in_att1), dim=1)
+        )
+
+        return out_decoder_1
+
+
 ##############################
 #        Model
 ##############################
@@ -433,7 +788,6 @@ class VitGenerator(nn.Module):
         self.encoder = ViTSharedEncoder(
             in_channels=in_ch,
             img_size=img_size,
-            # 16 => 4
             feature_size=feature_size,
             hidden_size=hidden_size,
             mlp_dim=mlp_dim,
@@ -1108,403 +1462,6 @@ class SharedUNetRModelA(nn.Module):
         return outA, outA
 
 
-def create_pretrained_medical_resnet(
-        pretrained_path: str,
-        model_constructor: callable,
-        spatial_dims: int = 3,
-        n_input_channels: int = 1,
-        num_classes: int = 1,
-        **kwargs_monai_resnet: Any
-) -> Tuple[ResNet, Sequence[str]]:
-    """This is specific constructor for MONAI ResNet module loading MedicalNEt weights.
-    See:
-    - https://github.com/Project-MONAI/MONAI
-    - https://github.com/Borda/MedicalNet
-    """
-    net = model_constructor(
-        pretrained=False,
-        spatial_dims=spatial_dims,
-        n_input_channels=n_input_channels,
-        num_classes=num_classes,
-        **kwargs_monai_resnet
-    )
-    net_dict = net.state_dict()
-    pretrain = torch.load(pretrained_path)
-    pretrain['state_dict'] = {k.replace('module.', ''): v for k, v in pretrain['state_dict'].items()}
-    missing = tuple({k for k in net_dict.keys() if k not in pretrain['state_dict']})
-    # logging.debug(f"missing in pretrained: {len(missing)}")
-    inside = tuple({k for k in pretrain['state_dict'] if k in net_dict.keys()})
-    # logging.debug(f"inside pretrained: {len(inside)}")
-    unused = tuple({k for k in pretrain['state_dict'] if k not in net_dict.keys()})
-    # logging.debug(f"unused pretrained: {len(unused)}")
-    assert len(inside) > len(missing)
-    assert len(inside) > len(unused)
-
-    pretrain['state_dict'] = {k: v for k, v in pretrain['state_dict'].items() if k in net_dict.keys()}
-    net.load_state_dict(pretrain['state_dict'], strict=False)
-    return net, inside
-
-
-class MultiAttGate(nn.Module):
-    def __init__(self, in_ch):
-        super(MultiAttGate, self).__init__()
-
-        self.initial_conv = nn.Conv3d(in_ch, in_ch,
-                                      kernel_size=1, stride=1, padding='same')
-        self.intermediate = nn.Sequential(
-            nn.ReLU(inplace=True),
-            conv_3_1(ch_in=in_ch, ch_out=in_ch),
-            nn.BatchNorm3d(in_ch),
-            nn.Sigmoid()
-        )
-
-    def forward(self, down_inp, sample_inp):
-        # z1
-        down_inp = self.initial_conv(down_inp)
-        # z2
-        sample_inp = self.initial_conv(sample_inp)
-        # z12
-        inp = torch.add(down_inp, sample_inp)
-        # x12
-        inp = self.intermediate(inp)
-        out = torch.mul(down_inp, inp)
-        return out
-
-
-class AttGate(nn.Module):
-    def __init__(self, in_ch):
-        super(AttGate, self).__init__()
-
-        self.initial_conv = nn.Conv3d(in_ch, in_ch,
-                                      kernel_size=1, stride=1, padding='same')
-        self.intermediate = nn.Sequential(
-            nn.ReLU(inplace=True),
-            nn.Conv3d(in_ch, in_ch, 1, stride=1, padding='same'),
-            nn.BatchNorm3d(in_ch),
-            nn.Sigmoid()
-        )
-
-    def forward(self, down_inp, sample_inp):
-        # z1
-        down_inp = self.initial_conv(down_inp)
-        # z2
-        sample_inp = self.initial_conv(sample_inp)
-        # z12
-        inp = torch.add(down_inp, sample_inp)
-        # x12
-        inp = self.intermediate(inp)
-        out = torch.mul(down_inp, inp)
-        return out
-
-
-##############################
-#        Generator
-##############################
-
-
-class MultiSingleConv(nn.Module):
-
-    def __init__(
-            self,
-            in_channels: int,
-            out_channels: int,
-    ):
-        super(MultiSingleConv, self).__init__()
-
-        self.cov_ = conv_3_1(ch_in=in_channels, ch_out=out_channels)
-
-    def forward(self, inp):
-        out = self.cov_(inp)
-        return out
-
-
-class Encoder(nn.Module):
-    def __init__(self, in_ch, list_ch):
-        super(Encoder, self).__init__()
-        self.encoder_1 = nn.Sequential(
-            SingleConv(in_ch, list_ch[1], kernel_size=3, stride=1, padding=1),
-            SingleConv(list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
-        )
-        self.encoder_2 = nn.Sequential(
-            SingleConv(list_ch[1], list_ch[2], kernel_size=3, stride=2, padding=1),
-            SingleConv(list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
-        )
-        self.encoder_3 = nn.Sequential(
-            SingleConv(list_ch[2], list_ch[3], kernel_size=3, stride=2, padding=1),
-            SingleConv(list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
-        )
-        self.encoder_4 = nn.Sequential(
-            SingleConv(list_ch[3], list_ch[4], kernel_size=3, stride=2, padding=1),
-            SingleConv(list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
-        )
-        self.encoder_5 = nn.Sequential(
-            SingleConv(list_ch[4], list_ch[5], kernel_size=3, stride=2, padding=1),
-            SingleConv(list_ch[5], list_ch[5], kernel_size=3, stride=1, padding=1)
-        )
-
-    def forward(self, x):
-        out_encoder_1 = self.encoder_1(x)
-        out_encoder_2 = self.encoder_2(out_encoder_1)
-        out_encoder_3 = self.encoder_3(out_encoder_2)
-        out_encoder_4 = self.encoder_4(out_encoder_3)
-        out_encoder_5 = self.encoder_5(out_encoder_4)
-
-        return [out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5]
-
-
-class DilatedEncoder(nn.Module):
-    def __init__(self, in_ch, list_ch):
-        super(DilatedEncoder, self).__init__()
-        self.encoder_1 = DualDilatedBlock(ch_in=in_ch, ch_out=list_ch[1])
-
-        self.encoder_2 = nn.Sequential(
-            nn.MaxPool3d(kernel_size=2),
-            DualDilatedBlock(ch_in=list_ch[1], ch_out=list_ch[2])
-        )
-
-        self.encoder_3 = nn.Sequential(
-            nn.MaxPool3d(kernel_size=2),
-            DualDilatedBlock(ch_in=list_ch[2], ch_out=list_ch[3])
-        )
-
-        self.encoder_4 = nn.Sequential(
-            nn.MaxPool3d(kernel_size=2),
-            DualDilatedBlock(ch_in=list_ch[3], ch_out=list_ch[4])
-        )
-
-        self.encoder_5 = nn.Sequential(
-            nn.MaxPool3d(kernel_size=2),
-            DualDilatedBlock(ch_in=list_ch[4], ch_out=list_ch[5])
-        )
-
-    def forward(self, x):
-        out_encoder_1 = self.encoder_1(x)
-        out_encoder_2 = self.encoder_2(out_encoder_1)
-        out_encoder_3 = self.encoder_3(out_encoder_2)
-        out_encoder_4 = self.encoder_4(out_encoder_3)
-        out_encoder_5 = self.encoder_5(out_encoder_4)
-
-        return [out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5]
-
-
-class Decoder(nn.Module):
-    def __init__(self, list_ch):
-        super(Decoder, self).__init__()
-
-        self.up_conv_4 = UpConv(list_ch[5], list_ch[4])
-        self.decoder_conv_4 = nn.Sequential(
-            SingleConv(2 * list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1),
-            SingleConv(list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
-        )
-        self.up_conv_3 = UpConv(list_ch[4], list_ch[3])
-        self.decoder_conv_3 = nn.Sequential(
-            SingleConv(2 * list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1),
-            SingleConv(list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
-        )
-        self.up_conv_2 = UpConv(list_ch[3], list_ch[2])
-        self.decoder_conv_2 = nn.Sequential(
-            SingleConv(2 * list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1),
-            SingleConv(list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
-        )
-        self.up_conv_1 = UpConv(list_ch[2], list_ch[1])
-        self.decoder_conv_1 = nn.Sequential(
-            SingleConv(2 * list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
-        )
-
-    def forward(self, out_encoder):
-        out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5 = out_encoder
-
-        out_decoder_4 = self.decoder_conv_4(
-            torch.cat((self.up_conv_4(out_encoder_5), out_encoder_4), dim=1)
-        )
-        out_decoder_3 = self.decoder_conv_3(
-            torch.cat((self.up_conv_3(out_decoder_4), out_encoder_3), dim=1)
-        )
-        out_decoder_2 = self.decoder_conv_2(
-            torch.cat((self.up_conv_2(out_decoder_3), out_encoder_2), dim=1)
-        )
-        out_decoder_1 = self.decoder_conv_1(
-            torch.cat((self.up_conv_1(out_decoder_2), out_encoder_1), dim=1)
-        )
-
-        return out_decoder_1
-
-
-class AttDecoder(nn.Module):
-    def __init__(self, list_ch):
-        super(AttDecoder, self).__init__()
-
-        self.up_conv_4 = UpConv(list_ch[5], list_ch[4])
-        self.att_gate4 = AttGate(list_ch[4])
-        self.decoder_conv_4 = nn.Sequential(
-            # MultiSingleConv(2 * list_ch[4], list_ch[4]),
-            # MultiSingleConv(list_ch[4], list_ch[4])
-            SingleConv(2 * list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1),
-            SingleConv(list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
-        )
-        self.up_conv_3 = UpConv(list_ch[4], list_ch[3])
-        self.att_gate3 = AttGate(list_ch[3])
-        self.decoder_conv_3 = nn.Sequential(
-            # MultiSingleConv(2 * list_ch[3], list_ch[3]),
-            # MultiSingleConv(list_ch[3], list_ch[3])
-            SingleConv(2 * list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1),
-            SingleConv(list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
-        )
-        self.up_conv_2 = UpConv(list_ch[3], list_ch[2])
-        self.att_gate2 = AttGate(list_ch[2])
-        self.decoder_conv_2 = nn.Sequential(
-            # MultiSingleConv(2 * list_ch[2], list_ch[2]),
-            # MultiSingleConv(list_ch[2], list_ch[2])
-            SingleConv(2 * list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1),
-            SingleConv(list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
-        )
-        self.up_conv_1 = UpConv(list_ch[2], list_ch[1])
-        self.att_gate1 = AttGate(list_ch[1])
-        self.decoder_conv_1 = nn.Sequential(
-            SingleConv(2 * list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
-        )
-
-    def forward(self, out_encoder):
-        out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5 = out_encoder
-
-        in_up4 = self.up_conv_4(out_encoder_5)
-        in_att4 = self.att_gate4(down_inp=out_encoder_4, sample_inp=in_up4)
-        out_decoder_4 = self.decoder_conv_4(
-            torch.cat((in_up4, in_att4), dim=1)
-        )
-        in_up3 = self.up_conv_3(out_decoder_4)
-        in_att3 = self.att_gate3(down_inp=out_encoder_3, sample_inp=in_up3)
-        out_decoder_3 = self.decoder_conv_3(
-            torch.cat((in_up3, in_att3), dim=1)
-        )
-        in_up2 = self.up_conv_2(out_decoder_3)
-        in_att2 = self.att_gate2(down_inp=out_encoder_2, sample_inp=in_up2)
-        out_decoder_2 = self.decoder_conv_2(
-            torch.cat((in_up2, in_att2), dim=1)
-        )
-        in_up1 = self.up_conv_1(out_decoder_2)
-        in_att1 = self.att_gate1(down_inp=out_encoder_1, sample_inp=in_up1)
-        out_decoder_1 = self.decoder_conv_1(
-            torch.cat((in_up1, in_att1), dim=1)
-        )
-
-        return out_decoder_1
-
-
-class PureAttDecoder(nn.Module):
-    def __init__(self, list_ch):
-        super(PureAttDecoder, self).__init__()
-
-        self.up_conv_4 = UpConv(list_ch[5], list_ch[4])
-        self.att_gate4 = AttGate(list_ch[4])
-        self.decoder_conv_4 = SingleConv(2 * list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
-
-        self.up_conv_3 = UpConv(list_ch[4], list_ch[3])
-        self.att_gate3 = AttGate(list_ch[3])
-        self.decoder_conv_3 = SingleConv(2 * list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
-
-        self.up_conv_2 = UpConv(list_ch[3], list_ch[2])
-        self.att_gate2 = AttGate(list_ch[2])
-        self.decoder_conv_2 = SingleConv(2 * list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
-
-        self.up_conv_1 = UpConv(list_ch[2], list_ch[1])
-        self.att_gate1 = AttGate(list_ch[1])
-        self.decoder_conv_1 = SingleConv(2 * list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
-
-    def forward(self, out_encoder):
-        out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5 = out_encoder
-
-        in_up4 = self.up_conv_4(out_encoder_5)
-        in_att4 = self.att_gate4(down_inp=out_encoder_4, sample_inp=in_up4)
-        out_decoder_4 = self.decoder_conv_4(
-            torch.cat((in_up4, in_att4), dim=1)
-        )
-
-        in_up3 = self.up_conv_3(out_decoder_4)
-        in_att3 = self.att_gate3(down_inp=out_encoder_3, sample_inp=in_up3)
-        out_decoder_3 = self.decoder_conv_3(
-            torch.cat((in_up3, in_att3), dim=1)
-        )
-
-        in_up2 = self.up_conv_2(out_decoder_3)
-        in_att2 = self.att_gate2(down_inp=out_encoder_2, sample_inp=in_up2)
-        out_decoder_2 = self.decoder_conv_2(
-            torch.cat((in_up2, in_att2), dim=1)
-        )
-
-        in_up1 = self.up_conv_1(out_decoder_2)
-        in_att1 = self.att_gate1(down_inp=out_encoder_1, sample_inp=in_up1)
-        out_decoder_1 = self.decoder_conv_1(
-            torch.cat((in_up1, in_att1), dim=1)
-        )
-
-        return out_decoder_1
-
-
-class PureMultiAttDecoder(nn.Module):
-    def __init__(self, list_ch):
-        super(PureMultiAttDecoder, self).__init__()
-
-        self.up_conv_4 = UpConv(list_ch[5], list_ch[4])
-        self.att_gate4 = MultiAttGate(list_ch[4])
-        self.decoder_conv_4 = nn.Sequential(
-            # MultiSingleConv(2 * list_ch[4], list_ch[4]),
-            # MultiSingleConv(list_ch[4], list_ch[4])
-            SingleConv(2 * list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1),
-            # SingleConv(list_ch[4], list_ch[4], kernel_size=3, stride=1, padding=1)
-        )
-        self.up_conv_3 = UpConv(list_ch[4], list_ch[3])
-        self.att_gate3 = MultiAttGate(list_ch[3])
-        self.decoder_conv_3 = nn.Sequential(
-            # MultiSingleConv(2 * list_ch[3], list_ch[3]),
-            # MultiSingleConv(list_ch[3], list_ch[3])
-            SingleConv(2 * list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1),
-            # SingleConv(list_ch[3], list_ch[3], kernel_size=3, stride=1, padding=1)
-        )
-        self.up_conv_2 = UpConv(list_ch[3], list_ch[2])
-        self.att_gate2 = MultiAttGate(list_ch[2])
-        self.decoder_conv_2 = nn.Sequential(
-            # MultiSingleConv(2 * list_ch[2], list_ch[2]),
-            # MultiSingleConv(list_ch[2], list_ch[2])
-            SingleConv(2 * list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1),
-            # SingleConv(list_ch[2], list_ch[2], kernel_size=3, stride=1, padding=1)
-        )
-        self.up_conv_1 = UpConv(list_ch[2], list_ch[1])
-        self.att_gate1 = MultiAttGate(list_ch[1])
-        self.decoder_conv_1 = nn.Sequential(
-            SingleConv(2 * list_ch[1], list_ch[1], kernel_size=3, stride=1, padding=1)
-        )
-
-    def forward(self, out_encoder):
-        out_encoder_1, out_encoder_2, out_encoder_3, out_encoder_4, out_encoder_5 = out_encoder
-
-        in_up4 = self.up_conv_4(out_encoder_5)
-        in_att4 = self.att_gate4(down_inp=out_encoder_4, sample_inp=in_up4)
-        out_decoder_4 = self.decoder_conv_4(
-            torch.cat((in_up4, in_att4), dim=1)
-        )
-
-        in_up3 = self.up_conv_3(out_decoder_4)
-        in_att3 = self.att_gate3(down_inp=out_encoder_3, sample_inp=in_up3)
-        out_decoder_3 = self.decoder_conv_3(
-            torch.cat((in_up3, in_att3), dim=1)
-        )
-
-        in_up2 = self.up_conv_2(out_decoder_3)
-        in_att2 = self.att_gate2(down_inp=out_encoder_2, sample_inp=in_up2)
-        out_decoder_2 = self.decoder_conv_2(
-            torch.cat((in_up2, in_att2), dim=1)
-        )
-
-        in_up1 = self.up_conv_1(out_decoder_2)
-        in_att1 = self.att_gate1(down_inp=out_encoder_1, sample_inp=in_up1)
-        out_decoder_1 = self.decoder_conv_1(
-            torch.cat((in_up1, in_att1), dim=1)
-        )
-
-        return out_decoder_1
-
-
 class BaseUNet(nn.Module):
     def __init__(self, in_ch, list_ch, mode_decoder, mode_encoder):
         super(BaseUNet, self).__init__()
@@ -1609,3 +1566,40 @@ class ModelMonai(nn.Module):
 
         output_A = self.conv_out_A(out_net_A)
         return [output_A, output_B]
+
+
+def create_pretrained_medical_resnet(
+        pretrained_path: str,
+        model_constructor: callable,
+        spatial_dims: int = 3,
+        n_input_channels: int = 1,
+        num_classes: int = 1,
+        **kwargs_monai_resnet: Any
+) -> Tuple[ResNet, Sequence[str]]:
+    """This is specific constructor for MONAI ResNet module loading MedicalNEt weights.
+    See:
+    - https://github.com/Project-MONAI/MONAI
+    - https://github.com/Borda/MedicalNet
+    """
+    net = model_constructor(
+        pretrained=False,
+        spatial_dims=spatial_dims,
+        n_input_channels=n_input_channels,
+        num_classes=num_classes,
+        **kwargs_monai_resnet
+    )
+    net_dict = net.state_dict()
+    pretrain = torch.load(pretrained_path)
+    pretrain['state_dict'] = {k.replace('module.', ''): v for k, v in pretrain['state_dict'].items()}
+    missing = tuple({k for k in net_dict.keys() if k not in pretrain['state_dict']})
+    # logging.debug(f"missing in pretrained: {len(missing)}")
+    inside = tuple({k for k in pretrain['state_dict'] if k in net_dict.keys()})
+    # logging.debug(f"inside pretrained: {len(inside)}")
+    unused = tuple({k for k in pretrain['state_dict'] if k not in net_dict.keys()})
+    # logging.debug(f"unused pretrained: {len(unused)}")
+    assert len(inside) > len(missing)
+    assert len(inside) > len(unused)
+
+    pretrain['state_dict'] = {k: v for k, v in pretrain['state_dict'].items() if k in net_dict.keys()}
+    net.load_state_dict(pretrain['state_dict'], strict=False)
+    return net, inside
