@@ -20,6 +20,7 @@ class conv_block_3(nn.Module):
         x = self.conv(x)
         return x
 
+
 class conv_block_7(nn.Module):
     def __init__(self, ch_in, ch_out):
         super(conv_block_7, self).__init__()
@@ -47,20 +48,20 @@ class conv_3_1(nn.Module):
             conv_block_3(ch_in, ch_out),
             nn.InstanceNorm3d(ch_out),
             nn.Mish(inplace=True) if act == 'relu' else nn.Mish(inplace=True)
-            )
+        )
         # self.conv_5 = conv_block_5(ch_in, ch_out)
         self.conv_7 = nn.Sequential(
             conv_block_7(ch_in, ch_out),
             nn.InstanceNorm3d(ch_out),
             nn.ReLU(inplace=True) if act == 'relu' else nn.Mish(inplace=True)
-            )
+        )
         # self.conv_9 = conv_block_9(ch_in, ch_out)
 
         self.conv = nn.Sequential(
             nn.Conv3d(ch_out * 2, ch_out, kernel_size=1, stride=1, padding=0, bias=True),
             nn.InstanceNorm3d(ch_out),
             nn.ReLU(inplace=True) if act == 'relu' else nn.Mish(inplace=True)
-            )
+        )
 
     def forward(self, x):
         # x1 = self.conv_1(x)
@@ -127,7 +128,7 @@ class DualDilatedBlock(nn.Module):
             nn.BatchNorm3d(ch_out),
             nn.ReLU(inplace=True),
             # if act == 'relu' else nn.Mish(inplace=True)
-            )
+        )
 
     def forward(self, x):
         x3 = self.conv_3(x)
@@ -138,19 +139,3 @@ class DualDilatedBlock(nn.Module):
         x = self.conv(x)
 
         return x
-
-
-
-# def test():
-#     model = MSU_Net(img_ch=1, output_ch=1)
-#     vol1 = torch.randn((1, 1, 64, 64, 64))
-#     # vol2 = torch.randn((1, 3, 128, 128, 128))
-#     # out.shape : (1, 3, 128, 128, 128)
-#
-#     # pred = model(vol1, vol2)
-#     pred = model(vol1)
-#     print(pred.shape)
-#
-#
-# if __name__ == '__main__':
-#     test()

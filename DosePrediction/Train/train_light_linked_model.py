@@ -16,7 +16,7 @@ from DosePrediction.Evaluate.evaluate_openKBP import *
 from DosePrediction.Train.loss import GenLoss
 
 from DosePrediction.Train.train_light_pyfer import Pyfer
-from OARSegmentation.train import litAutoSeg
+from OARSegmentation.train_light_transeg import Transeg
 
 import DosePrediction.Train.config as config
 import OARSegmentation.config as config_seg
@@ -86,7 +86,7 @@ class LinkedNet(pl.LightningModule):
             new_weights[new_k] = old_weights[old_k]
         self.dose_model.load_state_dict(new_weights)
 
-        self.seg_model = litAutoSeg(pretrain=False, mode_model=1)
+        self.seg_model = Transeg(pretrain=False, mode_model=1)
         new_weights = self.seg_model.state_dict()
         old_weights = torch.load(ckpt_file_path_seg)['state_dict']
 

@@ -11,7 +11,7 @@ from OARSegmentation.Models.Nets.base_blocks import ModifiedUnetrUpBlock, Modifi
 import OARSegmentation.config as config
 
 
-class ModifiedUNETR(nn.Module):
+class Model(nn.Module):
     """
     UNETR based on: "Hatamizadeh et al.,
     UNETR: Transformers for 3D Medical Image Segmentation <https://arxiv.org/abs/2103.10504>"
@@ -187,7 +187,7 @@ class ModifiedUNETR(nn.Module):
 
 def test():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = ModifiedUNETR(
+    model = Model(
         in_channels=1,
         out_channels=len(config.OAR_NAMES) + 1,
         img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),

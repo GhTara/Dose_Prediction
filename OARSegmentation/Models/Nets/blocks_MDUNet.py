@@ -133,18 +133,14 @@ class conv_3_1(nn.Module):
     def __init__(self, ch_in, ch_out, act):
         super(conv_3_1, self).__init__()
 
-        # self.conv_1 = conv_block_1(ch_in, ch_out)
-        # self.conv_2 = conv_block_2(ch_in, ch_out)
         self.conv_3 = nn.Sequential(
             conv_block_3(ch_in, ch_out),
             nn.InstanceNorm3d(ch_out),
             nn.ReLU(inplace=True) if act == 'relu' else nn.Mish(inplace=True))
-        # self.conv_5 = conv_block_5(ch_in, ch_out)
         self.conv_7 = nn.Sequential(
             conv_block_7(ch_in, ch_out),
             nn.InstanceNorm3d(ch_out),
             nn.ReLU(inplace=True) if act == 'relu' else nn.Mish(inplace=True))
-        # self.conv_9 = conv_block_9(ch_in, ch_out)
 
         self.conv = nn.Sequential(
             nn.Conv3d(ch_out * 2, ch_out, kernel_size=1, stride=1, padding=0, bias=True),
@@ -152,12 +148,8 @@ class conv_3_1(nn.Module):
             nn.ReLU(inplace=True) if act == 'relu' else nn.Mish(inplace=True))
 
     def forward(self, x):
-        # x1 = self.conv_1(x)
-        # x2 = self.conv_2(x)
         x3 = self.conv_3(x)
-        # x5 = self.conv_5(x)
         x7 = self.conv_7(x)
-        # x9 = self.conv_9(x)
 
         x = torch.cat((x3, x7), dim=1)
         x = self.conv(x)
@@ -241,82 +233,3 @@ class up_conv(nn.Module):
         x = self.up(x)
 
         return x
-
-
-class MSU_Net(nn.Module):
-    def __init__(self, img_ch=1, output_ch=1):
-        super(MSU_Net, self).__init__()
-
-        filters_number = [32, 64, 128, 256, 512]
-
-        self.Maxpool = nn.MaxPool3d(kernel_size=2, stride=2)
-
-        self.Conv1 = conv_3_1(ch_in=img_ch, ch_out=filters_number[0])
-        self.Conv2 = conv_3_1(ch_in=filters_number[0], ch_out=filters_number[1])
-        self.Conv3 = conv_3_1(ch_in=filters_number[1], ch_out=filters_number[2])
-        self.Conv4 = conv_3_1(ch_in=filters_number[2], ch_out=filters_number[3])
-        self.Conv5 = conv_3_1(ch_in=filters_number[3], ch_out=filters_number[4])
-
-        self.Up5 = up_conv(ch_in=filters_number[4], ch_out=filters_number[3])
-        self.Up_conv5 = conv_3_1(ch_in=filters_number[4], ch_out=filters_number[3])
-
-        self.Up4 = up_conv(ch_in=filters_number[3], ch_out=filters_number[2])
-        self.Up_conv4 = conv_3_1(ch_in=filters_number[3], ch_out=filters_number[2])
-
-        self.Up3 = up_conv(ch_in=filters_number[2], ch_out=filters_number[1])
-        self.Up_conv3 = conv_3_1(ch_in=filters_number[2], ch_out=filters_number[1])
-
-        self.Up2 = up_conv(ch_in=filters_number[1], ch_out=filters_number[0])
-        self.Up_conv2 = conv_3_1(ch_in=filters_number[1], ch_out=filters_number[0])
-
-        self.Conv_1x1 = nn.Conv3d(filters_number[0], output_ch, kernel_size=1, stride=1, padding=0)
-
-    def forward(self, x):
-        x1 = self.Conv1(x)
-
-        x2 = self.Maxpool(x1)
-        x2 = self.Conv2(x2)
-
-        x3 = self.Maxpool(x2)
-        x3 = self.Conv3(x3)
-
-        x4 = self.Maxpool(x3)
-        x4 = self.Conv4(x4)
-
-        x5 = self.Maxpool(x4)
-        x5 = self.Conv5(x5)
-
-        d5 = self.Up5(x5)
-        d5 = torch.cat((x4, d5), dim=1)
-        d5 = self.Up_conv5(d5)
-
-        d4 = self.Up4(d5)
-        d4 = torch.cat((x3, d4), dim=1)
-        d4 = self.Up_conv4(d4)
-
-        d3 = self.Up3(d4)
-        d3 = torch.cat((x2, d3), dim=1)
-        d3 = self.Up_conv3(d3)
-
-        d2 = self.Up2(d3)
-        d2 = torch.cat((x1, d2), dim=1)
-        d2 = self.Up_conv2(d2)
-
-        d1 = self.Conv_1x1(d2)
-
-        return d1
-
-
-def test():
-    model = MSU_Net(img_ch=1, output_ch=1)
-    vol1 = torch.randn((1, 1, 64, 64, 64))
-    # vol2 = torch.randn((1, 3, 128, 128, 128))
-    # out.shape : (1, 3, 128, 128, 128)
-
-    # pred = model(vol1, vol2)
-    pred = model(vol1)
-    print(pred.shape)
-
-
-if __name__ == '__main__':
-    test()

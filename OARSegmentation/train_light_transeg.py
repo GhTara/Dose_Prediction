@@ -1,9 +1,7 @@
 import os
-import sys
+from typing import Optional
 
-sys.path.insert(0, 'HOME_DIRECTORY')
-
-import torch
+import OARSegmentation.config as config
 
 from monai.inferers import sliding_window_inference
 from monai.data import DataLoader, list_data_collate, decollate_batch
@@ -11,18 +9,16 @@ from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
 from monai.networks.nets import UNETR
 
-import OARSegmentation.config as config
-from OARSegmentation.DataLoader.provided_dataset import get_dataset
-# from private_dataset import get_dataset
+import torch
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 # from pytorch_lightning.callbacks import TQDMProgressBar, ProgressBarBase
 from pytorch_lightning.loggers import MLFlowLogger
 
-from typing import Optional
-
-from OARSegmentation.OldModels.Networks.modified_unetr import ModifiedUNETR
+from OARSegmentation.DataLoader.provided_dataset import get_dataset
+# from private_dataset import get_dataset
+from OARSegmentation.OldModels.Networks.oar_transeg import TRANSEG
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 torch.backends.cudnn.benchmark = True
@@ -46,6 +42,8 @@ class TestOpenKBPDataModule(pl.LightningDataModule):
 class OpenKBPDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
+        self.val_data = None
+        self.train_data = None
 
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
@@ -67,6 +65,8 @@ class OpenKBPDataModule(pl.LightningDataModule):
 class PrivateDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
+        self.train_data = None
+        self.val_data = None
 
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
@@ -83,7 +83,7 @@ class PrivateDataModule(pl.LightningDataModule):
         # return DataLoader(self.val_data, batch_size=config.BATCH_SIZE)
 
 
-class litAutoSeg(pl.LightningModule):
+class Transeg(pl.LightningModule):
     def __init__(self, pretrain=False, mode_model=0):
         super().__init__()
         self.val_data = None
@@ -108,7 +108,7 @@ class litAutoSeg(pl.LightningModule):
             )
 
         elif mode_model == 1:
-            self._model = ModifiedUNETR(
+            self._model = TRANSEG(
                 in_channels=1,
                 out_channels=len(config.OAR_NAMES) + 1,
                 img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
@@ -302,7 +302,7 @@ def main(pretrain, mode_model):
     # private_data = PrivateDataModule()
 
     # initialise the LightningModule
-    net = litAutoSeg(pretrain, mode_model)
+    net = Transeg(pretrain, mode_model)
 
     # set up checkpoints
     checkpoint_callback = ModelCheckpoint(
