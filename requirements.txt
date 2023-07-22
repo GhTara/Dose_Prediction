@@ -1,4 +1,6 @@
+bitsandbytes==0.40.2
 einops==0.6.1
+matplotlib==3.7.1
 mlflow==2.1.0
 monai==0.7.0
 numpy==1.22.4
