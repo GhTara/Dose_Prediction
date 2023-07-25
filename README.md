@@ -62,7 +62,7 @@ Throughout this paper, we compare the performance of our proposed model with sta
 
 ## Citation
 
-If you find our code or paper useful, please cite as
+If you find our code or paper useful, please cite as:
 
 ```bibtex
 @article{dosepyfer2023,
