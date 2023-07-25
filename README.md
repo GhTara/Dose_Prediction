@@ -59,11 +59,9 @@ Throughout this paper, we compare the performance of our proposed model with sta
    images and corresponding PTVs of the patient and use the extracted OARs to predict dose
    distribution.
 
----
 
 ## Citation
 
----
 If you find our code or paper useful, please cite as
 
 ```bibtex
@@ -74,5 +72,3 @@ If you find our code or paper useful, please cite as
   year={2023}
 }
 ```
-
-
