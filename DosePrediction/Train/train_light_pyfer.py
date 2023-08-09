@@ -73,7 +73,7 @@ class Pyfer(pl.LightningModule):
         self.model_, inside = create_pretrained_unet(
             in_ch=9, out_ch=1,
             list_ch_A=[-1, 16, 32, 64, 128, 256],
-            ckpt_file='HOME_DIRECTORY' + '/PretrainedModels/baseline/C3D_bs4_iter80000.pkl',
+            ckpt_file='HOME_DIRECTORY' + '/PretrainedModels/C3D_bs4_iter80000.pkl',
             feature_size=16,
             img_size=(config.IMAGE_SIZE, config.IMAGE_SIZE, config.IMAGE_SIZE),
             num_layers=8,  # 4, 8, 12
