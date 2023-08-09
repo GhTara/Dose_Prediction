@@ -1,0 +1,16 @@
+path to c3d to train the pyfer model:
+(baseline: c3d) https://drive.google.com/file/d/1GxUayGAvSCt_hAd1UyOoe8E7WwJAG3ju/view?usp=drive_link
+
+@article{DCNN,
+   title = {Predicting voxel-level dose distributions for esophageal radiotherapy using densely connected network with dilated convolutions},
+	doi = {10.1088/1361-6560/aba87b},
+	url = {https://doi.org/10.1088%2F1361-6560%2Faba87b},
+	year = 2020,
+	month = {oct},<br>
+	publisher = {{IOP} Publishing},
+	volume = {65},
+	number = {20},
+	pages = {205013},
+	author = {Jingjing Zhang and Shuolin Liu and Hui Yan and Teng Li and Ronghu Mao and Jianfei Liu},
+	journal = {Physics in Medicine {\&} Biology
+}
