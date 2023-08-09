@@ -1,2 +1,2 @@
 path to prtrained model (trained by our in-house dataset) to train the segmentation model:
-(baseline) epoch=399-step=32000.ckpt = https://drive.google.com/file/d/1xY1BgSvARe71Z203ypZ0qvuyBpkc7GiL/view?usp=sharing
+(baseline) epoch=399-step=32000.ckpt = https://drive.google.com/file/d/11phgw3GU3qgQ8Kacts_YTrqUXAFJv-2r/view?usp=sharing
