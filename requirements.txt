@@ -1,9 +1,9 @@
 bitsandbytes==0.40.2
 einops==0.6.1
-matplotlib==3.7.1
+matplotlib~=3.5.1
 mlflow==2.6.0
 monai==0.7.0
-numpy==1.22.4
+numpy~=1.24.3
 pandas==1.5.3
 pytorch-lightning==1.8.0
 torch @ https://download.pytorch.org/whl/cu118/torch-2.0.1%2Bcu118-cp310-cp310-linux_x86_64.whl#sha256=a7a49d459bf4862f64f7bc1a68beccf8881c2fa9f3e0569608e16ba6f85ebf7b
@@ -13,3 +13,10 @@ torchmetrics==0.11.4
 torchsummary==1.5.1
 torchtext==0.15.2
 torchvision @ https://download.pytorch.org/whl/cu118/torchvision-0.15.2%2Bcu118-cp310-cp310-linux_x86_64.whl#sha256=19ca4ab5d6179bbe53cff79df1a855ee6533c2861ddc7389f68349d8b9f8302a
+
+torch~=2.1.0
+ray~=2.0.1
+torchvision~=0.15.2
+simpleitk~=2.1.1.2
+tqdm~=4.66.1
+opencv-python~=4.6.0.66
