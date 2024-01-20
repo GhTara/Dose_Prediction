@@ -65,7 +65,7 @@ Throughout this paper, we compare the performance of our proposed model with sta
 If you find our code or paper useful, please cite as:
 
 ```bibtex
-@article{dosepyfer2023,
+@article{dosepyfer2024,
   title={A Cascade Transformer-based Model for 3D Dose Distribution Prediction in Head and Neck Cancer Radiotherapy},
   author={Tara Gheshlaghi and Shahabedin Nabavi and Samire Shirzadikia and Mohsen Ebrahimi Moghaddam and Nima Rostampour},
   journal={Physics in Medicine & Biology},
