@@ -12,7 +12,7 @@
 
 
 
-Welcome to the GitHub repository for our [research paper](https://arxiv.org/ftp/arxiv/papers/2307/2307.12005.pdf), 
+Welcome to the GitHub repository for our [research paper](http://iopscience.iop.org/article/10.1088/1361-6560/ad209a), 
 "A Cascade Transformer-based Model for 3D Dose Distribution Prediction in Head and Neck Cancer Radiotherapy"! 
 This repository contains the implementation of our novel deep learning approach, 
 which aims to revolutionize the prediction of dose distribution maps in radiation oncology.
