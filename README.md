@@ -67,8 +67,9 @@ If you find our code or paper useful, please cite as:
 ```bibtex
 @article{dosepyfer2023,
   title={A Cascade Transformer-based Model for 3D Dose Distribution Prediction in Head and Neck Cancer Radiotherapy},
-  author={Tara Gheshlaghi, Shahabedin Nabavi, Samire Shirzadikia, Mohsen Ebrahimi Moghaddam, Nima Rostampour},
-  journal={arXiv preprint arXiv:2307.12005},
-  year={2023}
+  author={Tara Gheshlaghi and Shahabedin Nabavi and Samire Shirzadikia and Mohsen Ebrahimi Moghaddam and Nima Rostampour},
+  journal={Physics in Medicine & Biology},
+  year={2023},
+  url={http://iopscience.iop.org/article/10.1088/1361-6560/ad209a}
 }
 ```
